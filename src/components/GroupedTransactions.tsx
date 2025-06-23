@@ -68,11 +68,11 @@ const GroupedTransactions: React.FC<GroupedTransactionsProps> = ({ transactions,
   
   const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884d8', '#82ca9d', '#ffc658', '#8dd1e1'];
   
-  // Month names for display
-  const monthNames = [
+  // Month names for display - moved outside effect to avoid recreation
+  const monthNames = React.useMemo(() => [
     'January', 'February', 'March', 'April', 'May', 'June',
     'July', 'August', 'September', 'October', 'November', 'December'
-  ];
+  ], []);
 
   // Load all categories
   useEffect(() => {
@@ -194,13 +194,18 @@ const GroupedTransactions: React.FC<GroupedTransactionsProps> = ({ transactions,
     });
     
     setMonthlyData(monthlyDataArray);
-    setYearOptions(Array.from(years).sort());
     
-    // Default to most recent year if available
-    if (years.size > 0 && !yearOptions.includes(selectedYear)) {
-      setSelectedYear(Math.max(...Array.from(years)));
+    const sortedYears = Array.from(years).sort();
+    setYearOptions(sortedYears);
+    
+    // Default to most recent year if available, but only if we don't already have a valid year
+    // This prevents an infinite loop by not updating selectedYear when it's already valid
+    if (years.size > 0 && !sortedYears.includes(selectedYear)) {
+      const maxYear = Math.max(...sortedYears);
+      setSelectedYear(maxYear);
     }
-  }, [transactions, transactionCategories, monthNames, selectedYear, yearOptions]);
+  // Remove selectedYear and yearOptions from dependencies to prevent infinite updates
+  }, [transactions, transactionCategories, monthNames]);
 
   const handleViewChange = (event: SelectChangeEvent) => {
     setSelectedView(event.target.value);
