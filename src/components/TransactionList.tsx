@@ -101,6 +101,11 @@ const TransactionList: React.FC<TransactionListProps> = ({ transactions, isLoadi
         const aDate = new Date(`${aParts[2]}-${aParts[1]}-${aParts[0]}`);
         const bDate = new Date(`${bParts[2]}-${bParts[1]}-${bParts[0]}`);
         comparison = aDate.getTime() - bDate.getTime();
+      } else if (orderBy === 'balance') {
+        // Parse balance to number, removing currency symbol and commas
+        const aBalance = parseFloat(a.balance?.replace(/,/g, '') || '0');
+        const bBalance = parseFloat(b.balance?.replace(/,/g, '') || '0');
+        comparison = aBalance - bBalance;
       } else {
         const aValue = String(a[orderBy] || '').toLowerCase();
         const bValue = String(b[orderBy] || '').toLowerCase();
