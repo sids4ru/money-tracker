@@ -4,19 +4,38 @@ A React application for tracking finances with a SQLite database backend. This a
 
 ## Features
 
-- Import AIB CSV bank transaction files with duplicate detection
-- Persistent storage using SQLite database
-- View all transactions in a sortable, searchable table
-- Financial summary with totals for debits and credits
-- RESTful API for transaction management
-- Mobile-responsive design
+- **CSV Import**: Import AIB bank transaction exports with automatic format detection
+- **Duplicate Detection**: System automatically recognizes and prevents duplicate transactions
+- **Transaction Display**: Comprehensive table with transaction details and account balance
+- **Search & Filtering**: Full-text search across all transaction fields
+- **Sorting**: Sort by any column including date, amount, and balance
+- **Pagination**: Browse through transactions with configurable page sizes
+- **Summary Statistics**: View total debits, credits and overall transaction count
+- **Mobile-Responsive UI**: Adapts to different screen sizes
 
 ## Project Structure
 
-The project consists of two main parts:
+The project is organized into two main components:
 
-1. **Frontend**: React application with TypeScript
-2. **Backend**: Node.js/Express server with SQLite database
+### Backend (Server)
+- **Technology**: Node.js/Express with TypeScript
+- **Database**: SQLite for portable, file-based storage
+- **API**: RESTful endpoints for transaction management
+- **Directory**: `/server` contains all backend code
+
+### Frontend
+- **Framework**: React with TypeScript
+- **UI Library**: Material UI components
+- **State Management**: React hooks for local state management
+- **Directory**: Root level except `/server` contains frontend code
+
+### Key Files and Directories
+- `/server/src/database/db.ts` - Database connection and initialization
+- `/server/src/models/Transaction.ts` - Transaction model and database operations
+- `/server/src/controllers/transactionController.ts` - API endpoint handlers
+- `/src/components/TransactionList.tsx` - Main transaction display component
+- `/src/components/ImportCSV.tsx` - CSV import component
+- `/src/services/api.ts` - API client for backend communication
 
 ## Setup and Installation
 
@@ -41,7 +60,7 @@ The project consists of two main parts:
    ```
    npm run dev
    ```
-   This will start the server at http://localhost:5000
+   This will start the server at http://localhost:5001
 
 ### Frontend Setup
 
@@ -54,7 +73,7 @@ The project consists of two main parts:
    ```
    npm start
    ```
-   This will start the frontend at http://localhost:3000
+   This will start the frontend at http://localhost:3002 (or another available port)
 
 ## Usage
 
@@ -63,23 +82,46 @@ The project consists of two main parts:
 1. Click on the "Import Transactions" button
 2. Drag and drop your AIB CSV file or click to browse files
 3. The application will automatically detect and skip duplicate transactions
+4. A summary will display how many new transactions were added and how many duplicates were skipped
 
-### Viewing Transactions
+### Viewing and Managing Transactions
 
-- All imported transactions are displayed in the main table
-- Click on column headers to sort transactions
-- Use the search box to filter transactions
-- Pagination controls are available at the bottom of the table
+- **Sorting**: Click on any column header to sort transactions (ascending or descending)
+- **Searching**: Use the search box to filter transactions by any field
+- **Pagination**: Navigate between pages using controls at the bottom
+- **Balance Tracking**: View running account balance for each transaction
 
-## Database
+### Enhancements to Balance Column
 
-The application uses SQLite for data storage:
+- The balance column now displays the account balance at the time of each transaction
+- Transactions can be sorted by balance to identify high and low points
+- The balance column is properly formatted with currency symbol
 
-- The database file is stored in `server/data/finance_tracker.db`
-- You can back up this file to transfer your data between machines
-- SQLite is a portable, lightweight database that runs without a separate server process
+## Technical Implementation Details
 
-## API Endpoints
+### Database Schema
+
+The SQLite database uses the following schema for transactions:
+```
+CREATE TABLE transactions (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  account_number TEXT NOT NULL,
+  transaction_date TEXT NOT NULL,
+  description1 TEXT,
+  description2 TEXT,
+  description3 TEXT,
+  debit_amount TEXT,
+  credit_amount TEXT,
+  balance TEXT NOT NULL,
+  currency TEXT NOT NULL,
+  transaction_type TEXT NOT NULL,
+  local_currency_amount TEXT,
+  local_currency TEXT,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+)
+```
+
+### API Endpoints
 
 The backend provides the following REST API endpoints:
 
@@ -88,12 +130,25 @@ The backend provides the following REST API endpoints:
 - `POST /api/transactions` - Create a new transaction
 - `PUT /api/transactions/:id` - Update a transaction
 - `DELETE /api/transactions/:id` - Delete a transaction
-- `GET /api/transactions/search` - Search transactions
+- `GET /api/transactions/search` - Search transactions with various criteria
 - `POST /api/transactions/import` - Import transactions from CSV file
+
+### Version Control
+
+The project uses Git for version control:
+- `.gitignore` configured to exclude node_modules, database files, and other temporary files
+- Organized commit structure for tracking changes
 
 ## Future Enhancements
 
-- Transaction categorization
-- Budget tracking
-- Data visualization and reports
-- Multiple account support
+- **Transaction Categorization**: Automatically categorize transactions based on description
+- **Budget Tracking**: Set budget goals and track spending by category
+- **Data Visualization**: Charts and graphs for spending analysis
+- **Recurring Transaction Detection**: Identify regular payments and subscriptions
+- **Multiple Account Support**: Track transactions across different bank accounts
+- **Export Functionality**: Export transaction data in various formats
+- **Authentication**: User accounts and authentication for multi-user support
+
+## License
+
+This project is open-source software licensed under the MIT license.
