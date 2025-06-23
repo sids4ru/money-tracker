@@ -48,6 +48,7 @@ interface MonthlyData {
   expenditures: number;
   savings: number;
   balance: number;
+  openingBalance: number;
   categories: {
     [category: string]: number;
   };
@@ -150,6 +151,13 @@ const GroupedTransactions: React.FC<GroupedTransactionsProps> = ({ transactions,
       
       // Initialize month data if not exists
       if (!monthlyDataMap[monthKey]) {
+        // Find previous month's closing balance to use as opening balance
+        const prevMonth = month === 0 ? 11 : month - 1;
+        const prevYear = month === 0 ? year - 1 : year;
+        const prevMonthKey = `${prevYear}-${prevMonth}`;
+        const prevMonthData = monthlyDataMap[prevMonthKey];
+        const openingBalance = prevMonthData ? prevMonthData.balance : 0;
+        
         monthlyDataMap[monthKey] = {
           name: `${monthNames[month]} ${year}`,
           month,
@@ -157,7 +165,8 @@ const GroupedTransactions: React.FC<GroupedTransactionsProps> = ({ transactions,
           earnings: 0,
           expenditures: 0,
           savings: 0,
-          balance: 0,
+          balance: openingBalance,
+          openingBalance: openingBalance,
           categories: {}
         };
       }
@@ -171,17 +180,26 @@ const GroupedTransactions: React.FC<GroupedTransactionsProps> = ({ transactions,
       const categoryInfo = transaction.id ? transactionCategories[transaction.id] : undefined;
       const categoryName = categoryInfo ? categoryInfo.name : 'Uncategorized';
       
+      // Handle special categories
+      const isSavingsCategory = categoryName.toLowerCase().includes('saving') || 
+                                categoryName.toLowerCase().includes('investment');
+      
       // Update category total
       if (!monthlyDataMap[monthKey].categories[categoryName]) {
         monthlyDataMap[monthKey].categories[categoryName] = 0;
       }
       monthlyDataMap[monthKey].categories[categoryName] += amount;
       
-      // Update monthly totals
+      // Update monthly totals with proper classification
       if (amount > 0) {
         monthlyDataMap[monthKey].earnings += amount;
       } else if (amount < 0) {
-        monthlyDataMap[monthKey].expenditures += Math.abs(amount);
+        // If it's a savings category, treat differently from regular expenses
+        if (isSavingsCategory) {
+          monthlyDataMap[monthKey].savings += Math.abs(amount);
+        } else {
+          monthlyDataMap[monthKey].expenditures += Math.abs(amount);
+        }
       }
       
       monthlyDataMap[monthKey].balance += amount;
@@ -243,7 +261,9 @@ const GroupedTransactions: React.FC<GroupedTransactionsProps> = ({ transactions,
   // Calculate summary statistics
   const totalEarnings = filteredData.reduce((sum, month) => sum + month.earnings, 0);
   const totalExpenditures = filteredData.reduce((sum, month) => sum + month.expenditures, 0);
+  const totalSavings = filteredData.reduce((sum, month) => sum + month.savings, 0);
   const totalBalance = filteredData.reduce((sum, month) => sum + month.balance, 0);
+  const initialBalance = filteredData.length > 0 ? filteredData[0].openingBalance : 0;
   
   if (isLoading) {
     return (
@@ -288,6 +308,7 @@ const GroupedTransactions: React.FC<GroupedTransactionsProps> = ({ transactions,
               <MenuItem value="monthly">Monthly Overview</MenuItem>
               <MenuItem value="category">Category Distribution</MenuItem>
               <MenuItem value="trend">Spending Trend</MenuItem>
+              <MenuItem value="savings">Savings Analysis</MenuItem>
             </Select>
           </FormControl>
         </Grid>
@@ -310,7 +331,7 @@ const GroupedTransactions: React.FC<GroupedTransactionsProps> = ({ transactions,
       
       {/* Summary cards */}
       <Grid container spacing={3} sx={{ mb: 3 }}>
-        <Grid item xs={12} md={4}>
+        <Grid item xs={12} md={3}>
           <Card>
             <CardContent>
               <Typography variant="h6" gutterBottom>Total Income</Typography>
@@ -319,7 +340,7 @@ const GroupedTransactions: React.FC<GroupedTransactionsProps> = ({ transactions,
           </Card>
         </Grid>
         
-        <Grid item xs={12} md={4}>
+        <Grid item xs={12} md={3}>
           <Card>
             <CardContent>
               <Typography variant="h6" gutterBottom>Total Expenses</Typography>
@@ -328,12 +349,24 @@ const GroupedTransactions: React.FC<GroupedTransactionsProps> = ({ transactions,
           </Card>
         </Grid>
         
-        <Grid item xs={12} md={4}>
+        <Grid item xs={12} md={3}>
+          <Card>
+            <CardContent>
+              <Typography variant="h6" gutterBottom>Total Savings</Typography>
+              <Typography variant="h4" color="info.main">{formatCurrency(totalSavings)}</Typography>
+            </CardContent>
+          </Card>
+        </Grid>
+        
+        <Grid item xs={12} md={3}>
           <Card>
             <CardContent>
               <Typography variant="h6" gutterBottom>Net Balance</Typography>
               <Typography variant="h4" color={totalBalance >= 0 ? 'success.main' : 'error.main'}>
                 {formatCurrency(totalBalance)}
+              </Typography>
+              <Typography variant="caption" color="text.secondary">
+                Opening: {formatCurrency(initialBalance)}
               </Typography>
             </CardContent>
           </Card>
@@ -363,6 +396,8 @@ const GroupedTransactions: React.FC<GroupedTransactionsProps> = ({ transactions,
                   <Legend />
                   <Bar name="Income" dataKey="earnings" fill="#82ca9d" />
                   <Bar name="Expenses" dataKey="expenditures" fill="#ff8042" />
+                  <Bar name="Savings" dataKey="savings" fill="#8884d8" />
+                  <Bar name="Opening Balance" dataKey="openingBalance" fill="#82b1ff" />
                 </BarChart>
               </ResponsiveContainer>
             </>
@@ -445,13 +480,87 @@ const GroupedTransactions: React.FC<GroupedTransactionsProps> = ({ transactions,
                   />
                   <Line 
                     type="monotone" 
+                    name="Income" 
+                    dataKey="earnings" 
+                    stroke="#82ca9d" 
+                    strokeWidth={2} 
+                  />
+                  <Line 
+                    type="monotone" 
                     name="Expenses" 
                     dataKey="expenditures" 
                     stroke="#ff7300" 
                     strokeWidth={2} 
                   />
+                  <Line 
+                    type="monotone" 
+                    name="Savings" 
+                    dataKey="savings" 
+                    stroke="#00C49F" 
+                    strokeWidth={2} 
+                    strokeDasharray="5 5" 
+                  />
                 </AreaChart>
               </ResponsiveContainer>
+            </>
+          )}
+          
+          {selectedView === 'savings' && (
+            <>
+              <Typography variant="h6" gutterBottom>Savings Analysis ({selectedYear})</Typography>
+              <Grid container>
+                <Grid item xs={12} md={6}>
+                  <ResponsiveContainer width="100%" height={400}>
+                    <PieChart>
+                      <Pie
+                        data={[
+                          { name: 'Expenses', value: totalExpenditures },
+                          { name: 'Savings', value: totalSavings },
+                          { name: 'Remaining Income', value: Math.max(0, totalEarnings - totalExpenditures - totalSavings) }
+                        ]}
+                        cx="50%"
+                        cy="50%"
+                        labelLine={true}
+                        outerRadius={150}
+                        fill="#8884d8"
+                        dataKey="value"
+                        label={({ name, percent }) => 
+                          percent ? `${name}: ${(percent * 100).toFixed(1)}%` : ''
+                        }
+                      >
+                        <Cell fill="#ff8042" />
+                        <Cell fill="#00C49F" />
+                        <Cell fill="#82ca9d" />
+                      </Pie>
+                      <Tooltip formatter={(value) => formatCurrency(Number(value))} />
+                      <Legend />
+                    </PieChart>
+                  </ResponsiveContainer>
+                </Grid>
+                <Grid item xs={12} md={6}>
+                  <Box sx={{ mt: 3, p: 2 }}>
+                    <Typography variant="h6" gutterBottom>Savings Overview</Typography>
+                    <Typography variant="body1" paragraph>
+                      Total Income: {formatCurrency(totalEarnings)}
+                    </Typography>
+                    <Typography variant="body1" paragraph>
+                      Total Expenses: {formatCurrency(totalExpenditures)} 
+                      ({((totalExpenditures / totalEarnings) * 100).toFixed(1)}% of income)
+                    </Typography>
+                    <Typography variant="body1" paragraph>
+                      Total Savings: {formatCurrency(totalSavings)} 
+                      ({((totalSavings / totalEarnings) * 100).toFixed(1)}% of income)
+                    </Typography>
+                    <Typography variant="body1" paragraph>
+                      Remaining/Unallocated: {formatCurrency(Math.max(0, totalEarnings - totalExpenditures - totalSavings))}
+                      ({((Math.max(0, totalEarnings - totalExpenditures - totalSavings) / totalEarnings) * 100).toFixed(1)}% of income)
+                    </Typography>
+                    <Typography variant="body2" color="text.secondary">
+                      * Savings represents money deliberately set aside or invested, not simply unspent income.
+                    </Typography>
+                  </Box>
+                </Grid>
+              </Grid>
             </>
           )}
         </Box>
