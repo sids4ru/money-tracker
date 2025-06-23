@@ -1,8 +1,9 @@
-import React from 'react';
-import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
-import { ThemeProvider, createTheme, CssBaseline, Box, AppBar, Toolbar, Typography, Container } from '@mui/material';
+import React, { useState } from 'react';
+import { BrowserRouter as Router, Routes, Route, Link, useLocation } from 'react-router-dom';
+import { ThemeProvider, createTheme, CssBaseline, Box, AppBar, Toolbar, Typography, Container, Tabs, Tab } from '@mui/material';
 import AccountBalanceIcon from '@mui/icons-material/AccountBalance';
 import TransactionsPage from './pages/TransactionsPage';
+import GroupedTransactionsPage from './pages/GroupedTransactionsPage';
 
 // Create a theme
 const theme = createTheme({
@@ -17,6 +18,33 @@ const theme = createTheme({
   },
 });
 
+// Navigation tabs component
+const NavigationTabs = () => {
+  const location = useLocation();
+  const currentPath = location.pathname;
+  
+  return (
+    <Tabs 
+      value={currentPath} 
+      indicatorColor="secondary" 
+      textColor="inherit"
+      sx={{ 
+        '& .MuiTab-root': { 
+          color: 'white',
+          opacity: 0.7 
+        },
+        '& .Mui-selected': { 
+          color: 'white',
+          opacity: 1 
+        }
+      }}
+    >
+      <Tab label="All Transactions" value="/" component={Link} to="/" />
+      <Tab label="Grouped View" value="/grouped" component={Link} to="/grouped" />
+    </Tabs>
+  );
+};
+
 function App() {
   return (
     <ThemeProvider theme={theme}>
@@ -30,12 +58,15 @@ function App() {
                 Finance Tracker
               </Typography>
             </Toolbar>
+            <Box sx={{ px: 2, pb: 1 }}>
+              <NavigationTabs />
+            </Box>
           </AppBar>
           
           <Box component="main" sx={{ flexGrow: 1, py: 3 }}>
             <Routes>
               <Route path="/" element={<TransactionsPage />} />
-              {/* Add other routes here in the future */}
+              <Route path="/grouped" element={<GroupedTransactionsPage />} />
             </Routes>
           </Box>
           
