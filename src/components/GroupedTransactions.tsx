@@ -182,7 +182,11 @@ const GroupedTransactions: React.FC<GroupedTransactionsProps> = ({ transactions,
       
       // Handle special categories
       const isSavingsCategory = categoryName.toLowerCase().includes('saving') || 
-                                categoryName.toLowerCase().includes('investment');
+                                categoryName.toLowerCase().includes('investment') ||
+                                categoryName.toLowerCase().includes('deposit') ||
+                                categoryName.toLowerCase().includes('trading') ||
+                                categoryName.toLowerCase().includes('etoro') ||
+                                categoryName.toLowerCase().includes('revolut');
       
       // Update category total
       if (!monthlyDataMap[monthKey].categories[categoryName]) {
