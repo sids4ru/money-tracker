@@ -8,16 +8,18 @@ import dotenv from 'dotenv';
 
 // Import database initialization
 import { initializeDatabase } from './database/db';
+import { runMigrations } from './database/migrations/runMigrations';
 
 // Import routes
 import transactionRoutes from './routes/transactionRoutes';
+import categoryRoutes from './routes/categoryRoutes';
 
 // Load environment variables from .env file
 dotenv.config();
 
 // Initialize express app
 const app = express();
-const PORT = process.env.PORT || 5001; // Changed from 5000 to 5001 to avoid conflicts
+const PORT = process.env.PORT || 5002; // Changed from 5001 to 5002 to avoid conflicts
 
 // Middleware setup
 app.use(cors());
@@ -27,6 +29,7 @@ app.use(bodyParser.urlencoded({ extended: true }));
 
 // Routes
 app.use('/api/transactions', transactionRoutes);
+app.use('/api/categories', categoryRoutes);
 
 // Error handling middleware
 app.use((err: any, req: express.Request, res: express.Response, next: express.NextFunction) => {
@@ -55,6 +58,9 @@ async function startServer() {
   try {
     // Initialize SQLite database
     await initializeDatabase();
+    
+    // Run database migrations
+    await runMigrations();
     
     // Start express server
     app.listen(PORT, () => {

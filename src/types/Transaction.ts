@@ -13,4 +13,6 @@ export interface Transaction {
   localCurrencyAmount: string;
   localCurrency: string;
   description?: string; // Computed field for easier handling
+  groupingStatus?: 'manual' | 'auto' | 'none'; // Status of transaction grouping
+  categoryId?: number; // ID of the assigned category
 }

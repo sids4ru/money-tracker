@@ -15,6 +15,8 @@ export interface Transaction {
   local_currency_amount?: string;
   local_currency?: string;
   created_at?: string;
+  grouping_status?: 'manual' | 'auto' | 'none';
+  category_id?: number;
 }
 
 export class TransactionModel {

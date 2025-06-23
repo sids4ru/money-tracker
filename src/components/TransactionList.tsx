@@ -14,15 +14,20 @@ import {
   InputAdornment,
   Typography,
   LinearProgress,
-  Chip
+  Chip,
+  IconButton,
+  Tooltip
 } from '@mui/material';
 import SearchIcon from '@mui/icons-material/Search';
+import CategoryIcon from '@mui/icons-material/Category';
 import { Transaction } from '../types/Transaction';
+import CategoryAssignmentDialog from './CategoryAssignmentDialog';
+import { CategoryService } from '../services/categoryApi';
 
 type Order = 'asc' | 'desc';
 
 interface TableColumn {
-  id: keyof Transaction | 'amount';
+  id: keyof Transaction | 'amount' | 'actions';
   label: string;
   minWidth?: number;
   align?: 'right' | 'left' | 'center';
@@ -55,21 +60,30 @@ const columns: TableColumn[] = [
     id: 'transactionType', 
     label: 'Type', 
     minWidth: 100 
+  },
+  {
+    id: 'actions',
+    label: 'Actions',
+    minWidth: 80,
+    align: 'center'
   }
 ];
 
 interface TransactionListProps {
   transactions: Transaction[];
   isLoading: boolean;
+  onUpdate?: () => void; // Add callback for updates
 }
 
-const TransactionList: React.FC<TransactionListProps> = ({ transactions, isLoading }) => {
+const TransactionList: React.FC<TransactionListProps> = ({ transactions, isLoading, onUpdate }) => {
   const [page, setPage] = useState(0);
   const [rowsPerPage, setRowsPerPage] = useState(25);
   const [order, setOrder] = useState<Order>('desc');
   const [orderBy, setOrderBy] = useState<keyof Transaction | 'amount'>('date');
   const [searchQuery, setSearchQuery] = useState('');
   const [filteredTransactions, setFilteredTransactions] = useState<Transaction[]>([]);
+  const [categoryDialogOpen, setCategoryDialogOpen] = useState(false);
+  const [selectedTransaction, setSelectedTransaction] = useState<Transaction | null>(null);
 
   useEffect(() => {
     // Filter transactions based on search query
@@ -127,7 +141,8 @@ const TransactionList: React.FC<TransactionListProps> = ({ transactions, isLoadi
     setPage(0);
   };
 
-  const handleRequestSort = (property: keyof Transaction | 'amount') => {
+  const handleRequestSort = (property: keyof Transaction | 'amount' | 'actions') => {
+    if (property === 'actions') return; // We don't sort by actions column
     const isAsc = orderBy === property && order === 'asc';
     setOrder(isAsc ? 'desc' : 'asc');
     setOrderBy(property);
@@ -147,6 +162,30 @@ const TransactionList: React.FC<TransactionListProps> = ({ transactions, isLoadi
     return 0;
   };
 
+  const handleOpenCategoryDialog = (transaction: Transaction) => {
+    setSelectedTransaction(transaction);
+    setCategoryDialogOpen(true);
+  };
+  
+  const handleCloseCategoryDialog = () => {
+    setCategoryDialogOpen(false);
+    setSelectedTransaction(null);
+  };
+  
+  const handleAssignCategory = async (transactionId: number, categoryId: number, applyToSimilar: boolean) => {
+    try {
+      await CategoryService.assignTransactionToCategory(transactionId, categoryId, applyToSimilar);
+      console.log(`Transaction ${transactionId} assigned to category ${categoryId}`);
+      
+      // Call the onUpdate callback to refresh the data
+      if (onUpdate) {
+        onUpdate();
+      }
+    } catch (error) {
+      console.error('Error assigning category:', error);
+    }
+  };
+  
   return (
     <Paper sx={{ width: '100%', overflow: 'hidden' }}>
       <Box sx={{ p: 2 }}>
@@ -206,8 +245,25 @@ const TransactionList: React.FC<TransactionListProps> = ({ transactions, isLoadi
                   .map((transaction, index) => {
                     const amount = getTransactionAmount(transaction);
                     
+                    // Determine background color based on grouping status
+                    let bgColor = 'inherit';
+                    if (transaction.groupingStatus === 'manual') {
+                      bgColor = '#e8f5e9'; // light green
+                    } else if (transaction.groupingStatus === 'auto') {
+                      bgColor = '#e3f2fd'; // light blue
+                    } else if (transaction.groupingStatus === 'none') {
+                      bgColor = '#ffebee'; // light red
+                    }
+                    
                     return (
-                      <TableRow hover tabIndex={-1} key={transaction.id || index}>
+                      <TableRow 
+                        hover 
+                        tabIndex={-1} 
+                        key={transaction.id || index}
+                        sx={{ 
+                          backgroundColor: bgColor 
+                        }}
+                      >
                         <TableCell>{transaction.date}</TableCell>
                         <TableCell>{transaction.description}</TableCell>
                         <TableCell align="right" sx={{ 
@@ -226,6 +282,20 @@ const TransactionList: React.FC<TransactionListProps> = ({ transactions, isLoadi
                             color={transaction.transactionType === 'Credit' ? 'success' : 'default'}
                           />
                         </TableCell>
+                        <TableCell align="center">
+                          <Tooltip title="Assign to Category">
+                            <IconButton 
+                              size="small" 
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleOpenCategoryDialog(transaction);
+                              }}
+                              color="primary"
+                            >
+                              <CategoryIcon fontSize="small" />
+                            </IconButton>
+                          </Tooltip>
+                        </TableCell>
                       </TableRow>
                     );
                   })}
@@ -243,6 +313,13 @@ const TransactionList: React.FC<TransactionListProps> = ({ transactions, isLoadi
           />
         </>
       )}
+      
+      <CategoryAssignmentDialog
+        open={categoryDialogOpen}
+        transaction={selectedTransaction}
+        onClose={handleCloseCategoryDialog}
+        onAssign={handleAssignCategory}
+      />
     </Paper>
   );
 };

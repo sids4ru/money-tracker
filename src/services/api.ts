@@ -3,7 +3,7 @@ import { Transaction } from '../types/Transaction';
 
 // Create axios instance with base configuration
 const api = axios.create({
-  baseURL: 'http://localhost:5001/api', // Updated to match the new server port
+  baseURL: 'http://localhost:5002/api', // Updated to match the new server port
   headers: {
     'Content-Type': 'application/json'
   }
@@ -43,7 +43,9 @@ export const TransactionService = {
         transactionType: item.transaction_type || '',
         localCurrencyAmount: item.local_currency_amount || '',
         localCurrency: item.local_currency || '',
-        description: item.description1 // Add computed field
+        description: item.description1, // Add computed field
+        groupingStatus: item.grouping_status || 'none', // Map grouping status
+        categoryId: item.category_id
       }));
       
       return transactions;
@@ -76,7 +78,9 @@ export const TransactionService = {
         transactionType: item.transaction_type || '',
         localCurrencyAmount: item.local_currency_amount || '',
         localCurrency: item.local_currency || '',
-        description: item.description1 // Add computed field
+        description: item.description1, // Add computed field
+        groupingStatus: item.grouping_status || 'none', // Map grouping status
+        categoryId: item.category_id
       };
       
       return transaction;
@@ -155,7 +159,9 @@ export const TransactionService = {
         transactionType: item.transaction_type || '',
         localCurrencyAmount: item.local_currency_amount || '',
         localCurrency: item.local_currency || '',
-        description: item.description1 // Add computed field
+        description: item.description1, // Add computed field
+        groupingStatus: item.grouping_status || 'none', // Map grouping status
+        categoryId: item.category_id
       }));
       
       return transactions;

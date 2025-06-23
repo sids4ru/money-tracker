@@ -59,6 +59,7 @@ const TransactionsPage: React.FC = () => {
           <TransactionList 
             transactions={transactions} 
             isLoading={isLoading} 
+            onUpdate={loadTransactions} // Pass the loadTransactions function to refresh data
           />
         </Box>
       </Paper>
