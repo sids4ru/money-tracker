@@ -4,6 +4,7 @@ import { ThemeProvider, createTheme, CssBaseline, Box, AppBar, Toolbar, Typograp
 import AccountBalanceIcon from '@mui/icons-material/AccountBalance';
 import TransactionsPage from './pages/TransactionsPage';
 import GroupedTransactionsPage from './pages/GroupedTransactionsPage';
+import SettingsPage from './pages/SettingsPage';
 
 // Create a theme
 const theme = createTheme({
@@ -41,6 +42,7 @@ const NavigationTabs = () => {
     >
       <Tab label="All Transactions" value="/" component={Link} to="/" />
       <Tab label="Grouped View" value="/grouped" component={Link} to="/grouped" />
+      <Tab label="Settings" value="/settings" component={Link} to="/settings" />
     </Tabs>
   );
 };
@@ -67,6 +69,7 @@ function App() {
             <Routes>
               <Route path="/" element={<TransactionsPage />} />
               <Route path="/grouped" element={<GroupedTransactionsPage />} />
+              <Route path="/settings" element={<SettingsPage />} />
             </Routes>
           </Box>
           

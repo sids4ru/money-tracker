@@ -27,7 +27,7 @@ import { CategoryService } from '../services/categoryApi';
 type Order = 'asc' | 'desc';
 
 interface TableColumn {
-  id: keyof Transaction | 'amount' | 'actions';
+  id: keyof Transaction | 'amount' | 'actions' | 'category';
   label: string;
   minWidth?: number;
   align?: 'right' | 'left' | 'center';
@@ -59,7 +59,12 @@ const columns: TableColumn[] = [
   { 
     id: 'transactionType', 
     label: 'Type', 
-    minWidth: 100 
+    minWidth: 80
+  },
+  {
+    id: 'category', 
+    label: 'Category', 
+    minWidth: 150 
   },
   {
     id: 'actions',
@@ -79,11 +84,40 @@ const TransactionList: React.FC<TransactionListProps> = ({ transactions, isLoadi
   const [page, setPage] = useState(0);
   const [rowsPerPage, setRowsPerPage] = useState(25);
   const [order, setOrder] = useState<Order>('desc');
-  const [orderBy, setOrderBy] = useState<keyof Transaction | 'amount'>('date');
+  const [orderBy, setOrderBy] = useState<keyof Transaction | 'amount' | 'category'>('date');
   const [searchQuery, setSearchQuery] = useState('');
   const [filteredTransactions, setFilteredTransactions] = useState<Transaction[]>([]);
   const [categoryDialogOpen, setCategoryDialogOpen] = useState(false);
   const [selectedTransaction, setSelectedTransaction] = useState<Transaction | null>(null);
+  const [transactionCategories, setTransactionCategories] = useState<{[key: string]: string[]}>({});
+
+  // Load transaction categories
+  useEffect(() => {
+    const fetchCategories = async () => {
+      const categoriesMap: {[key: string]: string[]} = {};
+      
+      // Process transactions in batches to avoid too many concurrent requests
+      for (let i = 0; i < transactions.length; i += 10) {
+        const batch = transactions.slice(i, i + 10);
+        await Promise.all(batch.map(async (transaction) => {
+          if (transaction.id) {
+            try {
+              const cats = await CategoryService.getCategoriesForTransaction(transaction.id);
+              if (cats && cats.length > 0) {
+                categoriesMap[transaction.id] = cats.map(c => c.name);
+              }
+            } catch (error) {
+              console.error(`Failed to fetch categories for transaction ${transaction.id}:`, error);
+            }
+          }
+        }));
+      }
+      
+      setTransactionCategories(categoriesMap);
+    };
+    
+    fetchCategories();
+  }, [transactions]);
 
   useEffect(() => {
     // Filter transactions based on search query
@@ -120,6 +154,10 @@ const TransactionList: React.FC<TransactionListProps> = ({ transactions, isLoadi
         const aBalance = parseFloat(a.balance?.replace(/,/g, '') || '0');
         const bBalance = parseFloat(b.balance?.replace(/,/g, '') || '0');
         comparison = aBalance - bBalance;
+      } else if (orderBy === 'category') {
+        const aCategories = a.id && transactionCategories[a.id] ? transactionCategories[a.id].join(', ') : '';
+        const bCategories = b.id && transactionCategories[b.id] ? transactionCategories[b.id].join(', ') : '';
+        comparison = aCategories.localeCompare(bCategories);
       } else {
         const aValue = String(a[orderBy] || '').toLowerCase();
         const bValue = String(b[orderBy] || '').toLowerCase();
@@ -130,7 +168,7 @@ const TransactionList: React.FC<TransactionListProps> = ({ transactions, isLoadi
     });
 
     setFilteredTransactions(sorted);
-  }, [transactions, searchQuery, order, orderBy]);
+  }, [transactions, searchQuery, order, orderBy, transactionCategories]);
 
   const handleChangePage = (event: unknown, newPage: number) => {
     setPage(newPage);
@@ -141,7 +179,7 @@ const TransactionList: React.FC<TransactionListProps> = ({ transactions, isLoadi
     setPage(0);
   };
 
-  const handleRequestSort = (property: keyof Transaction | 'amount' | 'actions') => {
+  const handleRequestSort = (property: keyof Transaction | 'amount' | 'actions' | 'category') => {
     if (property === 'actions') return; // We don't sort by actions column
     const isAsc = orderBy === property && order === 'asc';
     setOrder(isAsc ? 'desc' : 'asc');
@@ -176,6 +214,15 @@ const TransactionList: React.FC<TransactionListProps> = ({ transactions, isLoadi
     try {
       await CategoryService.assignTransactionToCategory(transactionId, categoryId, applyToSimilar);
       console.log(`Transaction ${transactionId} assigned to category ${categoryId}`);
+      
+      // Refresh transaction categories cache for this transaction
+      const category = await CategoryService.getCategory(categoryId);
+      if (category) {
+        setTransactionCategories(prev => ({
+          ...prev,
+          [transactionId]: [category.name]
+        }));
+      }
       
       // Call the onUpdate callback to refresh the data
       if (onUpdate) {
@@ -244,25 +291,16 @@ const TransactionList: React.FC<TransactionListProps> = ({ transactions, isLoadi
                   .slice(page * rowsPerPage, page * rowsPerPage + rowsPerPage)
                   .map((transaction, index) => {
                     const amount = getTransactionAmount(transaction);
+                    const categoryNames = transaction.id && transactionCategories[transaction.id] 
+                      ? transactionCategories[transaction.id] 
+                      : [];
                     
-                    // Determine background color based on grouping status
-                    let bgColor = 'inherit';
-                    if (transaction.groupingStatus === 'manual') {
-                      bgColor = '#e8f5e9'; // light green
-                    } else if (transaction.groupingStatus === 'auto') {
-                      bgColor = '#e3f2fd'; // light blue
-                    } else if (transaction.groupingStatus === 'none') {
-                      bgColor = '#ffebee'; // light red
-                    }
-                    
+                    // Remove background color based on grouping status since it's not working properly
                     return (
                       <TableRow 
                         hover 
                         tabIndex={-1} 
                         key={transaction.id || index}
-                        sx={{ 
-                          backgroundColor: bgColor 
-                        }}
                       >
                         <TableCell>{transaction.date}</TableCell>
                         <TableCell>{transaction.description}</TableCell>
@@ -281,6 +319,24 @@ const TransactionList: React.FC<TransactionListProps> = ({ transactions, isLoadi
                             size="small"
                             color={transaction.transactionType === 'Credit' ? 'success' : 'default'}
                           />
+                        </TableCell>
+                        <TableCell>
+                          {categoryNames.length > 0 ? (
+                            categoryNames.map((name, i) => (
+                              <Chip 
+                                key={i}
+                                size="small"
+                                label={name}
+                                sx={{ mr: 0.5, mb: 0.5 }}
+                                color="primary"
+                                variant="outlined"
+                              />
+                            ))
+                          ) : (
+                            <Typography variant="caption" color="text.secondary">
+                              Not categorized
+                            </Typography>
+                          )}
                         </TableCell>
                         <TableCell align="center">
                           <Tooltip title="Assign to Category">

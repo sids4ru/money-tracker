@@ -1,6 +1,7 @@
 import { Request, Response } from 'express';
 import { CategoryModel, TransactionCategoryModel, Category } from '../models/Category';
 import { TransactionModel } from '../models/Transaction';
+import * as stringSimilarity from 'string-similarity';
 
 export const CategoryController = {
   /**
@@ -290,6 +291,9 @@ export const CategoryController = {
         return;
       }
 
+      // Remove any existing categories first to ensure one category per transaction
+      await TransactionCategoryModel.removeAllCategories(transactionId);
+
       // Assign category to transaction
       const assignmentId = await TransactionCategoryModel.assignCategory(transactionId, categoryId);
       
@@ -303,14 +307,33 @@ export const CategoryController = {
       if (applyToSimilar) {
         // Find similar transactions based on description
         const similarTransactions = await findSimilarTransactions(transaction);
+
+        // Parse the transaction date to compare
+        const transactionDate = parseTransactionDate(transaction.transaction_date);
         
-        // Assign the same category to similar transactions
+        // Assign the same category to similar transactions (only those with date >= current transaction date)
         for (const similarTransaction of similarTransactions) {
-          if (similarTransaction.id !== transactionId) {
+          // Skip if it's the same transaction
+          if (similarTransaction.id === transactionId) continue;
+          
+          // Parse the similar transaction date
+          const similarDate = parseTransactionDate(similarTransaction.transaction_date);
+          
+          // Only apply to current or future transactions (not past ones)
+          if (similarDate >= transactionDate) {
+            console.log(`Applying category to similar transaction ID ${similarTransaction.id}, date ${similarTransaction.transaction_date}`);
+            
+            // Remove any existing categories for each similar transaction too
+            await TransactionCategoryModel.removeAllCategories(similarTransaction.id!);
+            
+            // Then assign the new category
             await TransactionCategoryModel.assignCategory(similarTransaction.id!, categoryId);
+            
             // Mark these as auto-grouped
             await TransactionModel.update(similarTransaction.id!, { grouping_status: 'auto' });
             updatedSimilar++;
+          } else {
+            console.log(`Skipping similar transaction ID ${similarTransaction.id} with earlier date ${similarTransaction.transaction_date}`);
           }
         }
       }
@@ -410,16 +433,84 @@ export const CategoryController = {
 };
 
 /**
- * Find transactions similar to the provided one
+ * Find transactions similar to the provided one with advanced pattern matching
+ * Uses string-similarity library and regex patterns for more accurate matching
  */
 async function findSimilarTransactions(transaction: any) {
-  // Get description components
-  const description1 = transaction.description1 || '';
+  // Get transaction's main description field
+  const description = transaction.description1 || '';
   
-  // Look for transactions with similar description
-  // This is a simplified approach - you may want to adjust this logic
-  // to better match your definition of "similar transactions"
-  return await TransactionModel.search({
-    searchText: description1.split(' ')[0] // Use first word of description
+  // Extract merchant identifiers using regular expressions
+  
+  // Pattern 1: Match "VDC-TESCO", "VDC-SPAR", etc.
+  const merchantRegex = /([A-Z]+)-([A-Z]+)/;
+  const merchantMatch = description.match(merchantRegex);
+  
+  // Pattern 2: For descriptions with store number or location codes like "TESCO STORES 1234"
+  const storeRegex = /([A-Z]+)\s+([A-Z]+)(?:\s+\d+)?/;
+  const storeMatch = description.match(storeRegex);
+  
+  // Extract the core merchant identifier to use for searching
+  let merchantIdentifier = '';
+  
+  if (merchantMatch) {
+    // Use the matched merchant pattern (e.g., "VDC-TESCO")
+    merchantIdentifier = merchantMatch[0];
+  } else if (storeMatch) {
+    // Use the matched store name (e.g., "TESCO STORES")
+    merchantIdentifier = storeMatch[0];
+  } else {
+    // Fallback to the first 2-3 words
+    const words = description.split(/\s+/).filter((w: string) => w.length > 0);
+    merchantIdentifier = words.slice(0, Math.min(2, words.length)).join(' ');
+  }
+  
+  console.log(`Looking for transactions similar to: "${description}"`);
+  console.log(`Using merchant identifier: "${merchantIdentifier}"`);
+  
+  // First, get a broader set of potential matches
+  const potentialMatches = await TransactionModel.search({
+    searchText: merchantIdentifier.split(/[\s-]/)[0] // Use first part for broad search
   });
+  
+  // Then filter by similarity score to get only highly similar transactions
+  const similarTransactions = potentialMatches.filter(potentialMatch => {
+    const potentialDesc = potentialMatch.description1 || '';
+    
+    // Calculate similarity score between the descriptions
+    const similarityScore = stringSimilarity.compareTwoStrings(
+      description.toLowerCase(), 
+      potentialDesc.toLowerCase()
+    );
+    
+    // Check for regex pattern match as well
+    const patternMatch = merchantMatch && potentialDesc.match(merchantRegex)?.[0] === merchantMatch[0];
+    
+    // Log for debugging
+    console.log(`Comparing: "${description}" with "${potentialDesc}" - Score: ${similarityScore}`);
+    
+    // Require high similarity (>0.6) or exact pattern match
+    return similarityScore > 0.6 || patternMatch;
+  });
+  
+  return similarTransactions;
+}
+
+/**
+ * Helper function to parse transaction date string into a Date object
+ * Handles different date formats like DD/MM/YYYY
+ */
+function parseTransactionDate(dateStr: string): Date {
+  // Handle different possible date formats
+  if (dateStr.includes('/')) {
+    // Format: DD/MM/YYYY
+    const [day, month, year] = dateStr.split('/').map(Number);
+    return new Date(year, month - 1, day);
+  } else if (dateStr.includes('-')) {
+    // Format: YYYY-MM-DD
+    return new Date(dateStr);
+  } else {
+    // Default parsing attempt
+    return new Date(dateStr);
+  }
 }
