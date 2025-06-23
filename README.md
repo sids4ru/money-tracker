@@ -1,46 +1,99 @@
-# Getting Started with Create React App
+# Finance Tracker
 
-This project was bootstrapped with [Create React App](https://github.com/facebook/create-react-app).
+A React application for tracking finances with a SQLite database backend. This application allows users to import AIB bank transactions from CSV files, view and search transaction history, and perform basic financial analysis.
 
-## Available Scripts
+## Features
 
-In the project directory, you can run:
+- Import AIB CSV bank transaction files with duplicate detection
+- Persistent storage using SQLite database
+- View all transactions in a sortable, searchable table
+- Financial summary with totals for debits and credits
+- RESTful API for transaction management
+- Mobile-responsive design
 
-### `npm start`
+## Project Structure
 
-Runs the app in the development mode.\
-Open [http://localhost:3000](http://localhost:3000) to view it in the browser.
+The project consists of two main parts:
 
-The page will reload if you make edits.\
-You will also see any lint errors in the console.
+1. **Frontend**: React application with TypeScript
+2. **Backend**: Node.js/Express server with SQLite database
 
-### `npm test`
+## Setup and Installation
 
-Launches the test runner in the interactive watch mode.\
-See the section about [running tests](https://facebook.github.io/create-react-app/docs/running-tests) for more information.
+### Prerequisites
 
-### `npm run build`
+- Node.js (v14 or higher)
+- npm (v6 or higher)
 
-Builds the app for production to the `build` folder.\
-It correctly bundles React in production mode and optimizes the build for the best performance.
+### Backend Setup
 
-The build is minified and the filenames include the hashes.\
-Your app is ready to be deployed!
+1. Navigate to the server directory:
+   ```
+   cd server
+   ```
 
-See the section about [deployment](https://facebook.github.io/create-react-app/docs/deployment) for more information.
+2. Install dependencies:
+   ```
+   npm install
+   ```
 
-### `npm run eject`
+3. Start the server in development mode:
+   ```
+   npm run dev
+   ```
+   This will start the server at http://localhost:5000
 
-**Note: this is a one-way operation. Once you `eject`, you can’t go back!**
+### Frontend Setup
 
-If you aren’t satisfied with the build tool and configuration choices, you can `eject` at any time. This command will remove the single build dependency from your project.
+1. From the project root directory, install dependencies:
+   ```
+   npm install
+   ```
 
-Instead, it will copy all the configuration files and the transitive dependencies (webpack, Babel, ESLint, etc) right into your project so you have full control over them. All of the commands except `eject` will still work, but they will point to the copied scripts so you can tweak them. At this point you’re on your own.
+2. Start the React development server:
+   ```
+   npm start
+   ```
+   This will start the frontend at http://localhost:3000
 
-You don’t have to ever use `eject`. The curated feature set is suitable for small and middle deployments, and you shouldn’t feel obligated to use this feature. However we understand that this tool wouldn’t be useful if you couldn’t customize it when you are ready for it.
+## Usage
 
-## Learn More
+### Importing Transactions
 
-You can learn more in the [Create React App documentation](https://facebook.github.io/create-react-app/docs/getting-started).
+1. Click on the "Import Transactions" button
+2. Drag and drop your AIB CSV file or click to browse files
+3. The application will automatically detect and skip duplicate transactions
 
-To learn React, check out the [React documentation](https://reactjs.org/).
+### Viewing Transactions
+
+- All imported transactions are displayed in the main table
+- Click on column headers to sort transactions
+- Use the search box to filter transactions
+- Pagination controls are available at the bottom of the table
+
+## Database
+
+The application uses SQLite for data storage:
+
+- The database file is stored in `server/data/finance_tracker.db`
+- You can back up this file to transfer your data between machines
+- SQLite is a portable, lightweight database that runs without a separate server process
+
+## API Endpoints
+
+The backend provides the following REST API endpoints:
+
+- `GET /api/transactions` - Get all transactions
+- `GET /api/transactions/:id` - Get a specific transaction
+- `POST /api/transactions` - Create a new transaction
+- `PUT /api/transactions/:id` - Update a transaction
+- `DELETE /api/transactions/:id` - Delete a transaction
+- `GET /api/transactions/search` - Search transactions
+- `POST /api/transactions/import` - Import transactions from CSV file
+
+## Future Enhancements
+
+- Transaction categorization
+- Budget tracking
+- Data visualization and reports
+- Multiple account support
