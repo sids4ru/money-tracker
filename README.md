@@ -154,7 +154,7 @@ The application now includes:
 
 1. **Transaction Categorization Improvements**:
    - ✅ Skip already categorized transactions (both manual and auto) when using "Apply to similar transactions" feature
-   - Remove hard-coded categories in category page and make the system more dynamic
+   - ✅ Remove hard-coded categories in category page and make the system more dynamic
    - Add feature to persist auto-categorization rules using a similarity table
    - Create UI for the similarity table in the settings page
 
