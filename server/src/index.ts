@@ -19,7 +19,8 @@ dotenv.config();
 
 // Initialize express app
 const app = express();
-const PORT = process.env.PORT || 5002; // Changed from 5001 to 5002 to avoid conflicts
+const PORT = process.env.PORT || 5001;
+console.log(`Server configured to use port ${PORT} (from environment variable: ${process.env.PORT})`);
 
 // Middleware setup
 app.use(cors());

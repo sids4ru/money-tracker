@@ -311,31 +311,37 @@ export const CategoryController = {
         // Parse the transaction date to compare
         const transactionDate = parseTransactionDate(transaction.transaction_date);
         
-        // Assign the same category to similar transactions (only those with date >= current transaction date)
-        for (const similarTransaction of similarTransactions) {
-          // Skip if it's the same transaction
-          if (similarTransaction.id === transactionId) continue;
-          
-          // Parse the similar transaction date
-          const similarDate = parseTransactionDate(similarTransaction.transaction_date);
-          
-          // Only apply to current or future transactions (not past ones)
-          if (similarDate >= transactionDate) {
-            console.log(`Applying category to similar transaction ID ${similarTransaction.id}, date ${similarTransaction.transaction_date}`);
-            
-            // Remove any existing categories for each similar transaction too
-            await TransactionCategoryModel.removeAllCategories(similarTransaction.id!);
-            
-            // Then assign the new category
-            await TransactionCategoryModel.assignCategory(similarTransaction.id!, categoryId);
-            
-            // Mark these as auto-grouped
-            await TransactionModel.update(similarTransaction.id!, { grouping_status: 'auto' });
-            updatedSimilar++;
-          } else {
-            console.log(`Skipping similar transaction ID ${similarTransaction.id} with earlier date ${similarTransaction.transaction_date}`);
-          }
+      // Assign the same category to similar transactions (only those with date >= current transaction date)
+      for (const similarTransaction of similarTransactions) {
+        // Skip if it's the same transaction
+        if (similarTransaction.id === transactionId) continue;
+        
+        // Skip if this transaction already has a manual category assignment
+        if (similarTransaction.grouping_status === 'manual') {
+          console.log(`Skipping similar transaction ID ${similarTransaction.id} because it's already manually categorized`);
+          continue;
         }
+        
+        // Parse the similar transaction date
+        const similarDate = parseTransactionDate(similarTransaction.transaction_date);
+        
+        // Only apply to current or future transactions (not past ones)
+        if (similarDate >= transactionDate) {
+          console.log(`Applying category to similar transaction ID ${similarTransaction.id}, date ${similarTransaction.transaction_date}`);
+          
+          // Remove any existing categories for each similar transaction too
+          await TransactionCategoryModel.removeAllCategories(similarTransaction.id!);
+          
+          // Then assign the new category
+          await TransactionCategoryModel.assignCategory(similarTransaction.id!, categoryId);
+          
+          // Mark these as auto-grouped
+          await TransactionModel.update(similarTransaction.id!, { grouping_status: 'auto' });
+          updatedSimilar++;
+        } else {
+          console.log(`Skipping similar transaction ID ${similarTransaction.id} with earlier date ${similarTransaction.transaction_date}`);
+        }
+      }
       }
 
       res.status(200).json({

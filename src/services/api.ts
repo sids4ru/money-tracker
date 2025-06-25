@@ -3,11 +3,14 @@ import { Transaction } from '../types/Transaction';
 
 // Create axios instance with base configuration
 const api = axios.create({
-  baseURL: 'http://localhost:5002/api', // Updated to match the new server port
+  baseURL: process.env.REACT_APP_API_URL || 'http://localhost:5001/api', // Use environment variable with fallback
   headers: {
     'Content-Type': 'application/json'
   }
 });
+
+// Log API configuration for debugging
+console.log('API is configured with baseURL:', process.env.REACT_APP_API_URL || 'http://localhost:5001/api');
 
 // Interface for transaction search params
 interface SearchParams {

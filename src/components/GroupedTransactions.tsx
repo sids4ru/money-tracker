@@ -15,22 +15,33 @@ import {
 import { Transaction } from '../types/Transaction';
 import { CategoryService } from '../services/categoryApi';
 import {
-  ResponsiveContainer,
-  BarChart,
-  Bar,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  Legend,
-  PieChart,
-  Pie,
-  Cell,
-  LineChart,
-  Line,
-  AreaChart,
-  Area
-} from 'recharts';
+  Chart as ChartJS,
+  CategoryScale,
+  LinearScale,
+  PointElement,
+  LineElement,
+  BarElement,
+  ArcElement,
+  Title,
+  Tooltip as ChartTooltip,
+  Legend as ChartLegend,
+  Filler
+} from 'chart.js';
+import { Bar as BarChart, Pie as PieChart, Line as LineChart } from 'react-chartjs-2';
+
+// Register ChartJS components
+ChartJS.register(
+  CategoryScale,
+  LinearScale,
+  PointElement,
+  LineElement,
+  BarElement,
+  ArcElement,
+  Title,
+  ChartTooltip,
+  ChartLegend,
+  Filler
+);
 
 // Create a wrapper around MuiGrid to make TypeScript happy
 const Grid = MuiGrid as any;
@@ -57,14 +68,27 @@ interface MonthlyData {
 interface CategoryEntry {
   name: string;
   value: number;
+  id?: number;
+  parentId?: number | null;
+  subcategories?: CategoryEntry[];
+}
+
+interface ParentCategoryWithSubcategories {
+  parentName: string;
+  parentId: number;
+  total: number;
+  subcategories: {name: string, value: number}[];
 }
 
 const GroupedTransactions: React.FC<GroupedTransactionsProps> = ({ transactions, isLoading }) => {
   const [monthlyData, setMonthlyData] = useState<MonthlyData[]>([]);
-  const [categories, setCategories] = useState<any[]>([]);
+  const [categories, setCategories] = useState<{id: number, name: string, parent_id?: number | null}[]>([]);
   const [selectedView, setSelectedView] = useState<string>('monthly');
   const [selectedYear, setSelectedYear] = useState<number>(new Date().getFullYear());
+  const [selectedMonth, setSelectedMonth] = useState<number>(-1); // -1 means all months
+  const [categoryHierarchy, setCategoryHierarchy] = useState<{[key: number]: {id: number, name: string, parent_id?: number | null, children: number[]}}>({}); 
   const [yearOptions, setYearOptions] = useState<number[]>([]);
+  const [monthOptions, setMonthOptions] = useState<{value: number, label: string}[]>([]);
   const [transactionCategories, setTransactionCategories] = useState<{[key: string]: {name: string, id: number}}>({});
   
   const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884d8', '#82ca9d', '#ffc658', '#8dd1e1'];
@@ -81,10 +105,36 @@ const GroupedTransactions: React.FC<GroupedTransactionsProps> = ({ transactions,
       try {
         const response = await CategoryService.getAllCategories();
         if (response && Array.isArray(response)) {
+          // Store all categories with their parent_id
           setCategories(response.map((cat: any) => ({ 
             id: cat.id || 0, 
-            name: cat.name || 'Unknown'
+            name: cat.name || 'Uncategorized',
+            parent_id: cat.parent_id
           })));
+          
+          // Build category hierarchy - organize parent-child relationships
+          const hierarchy: {[key: number]: {id: number, name: string, parent_id?: number | null, children: number[]}} = {};
+          
+          // First pass: create entries for all categories
+          response.forEach((cat: any) => {
+            if (cat.id) {
+              hierarchy[cat.id] = {
+                id: cat.id,
+                name: cat.name || 'Uncategorized',
+                parent_id: cat.parent_id,
+                children: []
+              };
+            }
+          });
+          
+          // Second pass: populate children arrays
+          response.forEach((cat: any) => {
+            if (cat.id && cat.parent_id && hierarchy[cat.parent_id]) {
+              hierarchy[cat.parent_id].children.push(cat.id);
+            }
+          });
+          
+          setCategoryHierarchy(hierarchy);
         }
       } catch (error) {
         console.error('Error fetching categories:', error);
@@ -99,25 +149,40 @@ const GroupedTransactions: React.FC<GroupedTransactionsProps> = ({ transactions,
     const fetchTransactionCategories = async () => {
       const categoriesMap: {[key: string]: {name: string, id: number}} = {};
       
-      // Process transactions in batches to avoid too many concurrent requests
-      for (let i = 0; i < transactions.length; i += 10) {
-        const batch = transactions.slice(i, i + 10);
-        await Promise.all(batch.map(async (transaction) => {
-          if (transaction.id) {
-            try {
-              const cats = await CategoryService.getCategoriesForTransaction(transaction.id);
-              if (cats && cats.length > 0) {
-                const catId = cats[0].id !== undefined ? cats[0].id : 0;
-                categoriesMap[transaction.id] = { 
-                  name: cats[0].name, 
-                  id: catId 
-                };
+      // First get all available categories to have the complete data
+      try {
+        const allCategories = await CategoryService.getAllCategories();
+        console.log("All categories loaded:", allCategories.length);
+        
+        // Process transactions in batches to avoid too many concurrent requests
+        for (let i = 0; i < transactions.length; i += 10) {
+          const batch = transactions.slice(i, i + 10);
+          await Promise.all(batch.map(async (transaction) => {
+            if (transaction.id) {
+              try {
+                const cats = await CategoryService.getCategoriesForTransaction(transaction.id);
+                if (cats && cats.length > 0) {
+                  const catId = cats[0].id !== undefined ? cats[0].id : 0;
+                  
+                  // Find the full category object to check if it's a parent or child
+                  const fullCategory = allCategories.find(c => c.id === catId);
+                  
+                  // Use the category we found or fallback to the basic one
+                  categoriesMap[transaction.id] = { 
+                    name: fullCategory?.name || cats[0].name || 'Uncategorized', 
+                    id: catId 
+                  };
+                  
+                  console.log(`Transaction ${transaction.id} assigned to category: ${fullCategory?.name || cats[0].name}, ID: ${catId}`);
+                }
+              } catch (error) {
+                console.error(`Failed to fetch categories for transaction ${transaction.id}:`, error);
               }
-            } catch (error) {
-              console.error(`Failed to fetch categories for transaction ${transaction.id}:`, error);
             }
-          }
-        }));
+          }));
+        }
+      } catch (error) {
+        console.error('Error during category loading:', error);
       }
       
       setTransactionCategories(categoriesMap);
@@ -229,6 +294,31 @@ const GroupedTransactions: React.FC<GroupedTransactionsProps> = ({ transactions,
   // Remove selectedYear and yearOptions from dependencies to prevent infinite updates
   }, [transactions, transactionCategories, monthNames]);
 
+  // Generate available months based on filtered data
+  useEffect(() => {
+    const availableMonths = new Set<number>();
+    monthlyData
+      .filter(data => data.year === selectedYear)
+      .forEach(data => {
+        availableMonths.add(data.month);
+      });
+    
+    const monthOptionsList = Array.from(availableMonths).sort().map(month => ({
+      value: month,
+      label: monthNames[month]
+    }));
+    
+    // Add "All Months" option
+    monthOptionsList.unshift({ value: -1, label: "All Months" });
+    
+    setMonthOptions(monthOptionsList);
+    
+    // Reset selected month if not available in the new year
+    if (!availableMonths.has(selectedMonth) && selectedMonth !== -1) {
+      setSelectedMonth(-1);
+    }
+  }, [selectedYear, monthlyData, monthNames, selectedMonth]);
+
   const handleViewChange = (event: SelectChangeEvent) => {
     setSelectedView(event.target.value);
   };
@@ -237,8 +327,47 @@ const GroupedTransactions: React.FC<GroupedTransactionsProps> = ({ transactions,
     setSelectedYear(Number(event.target.value));
   };
   
+  const handleMonthChange = (event: SelectChangeEvent<number>) => {
+    setSelectedMonth(Number(event.target.value));
+  };
+  
   // Filter data by selected year
-  const filteredData = monthlyData.filter(data => data.year === selectedYear);
+  const yearData = monthlyData.filter(data => data.year === selectedYear);
+
+  // Get the selected month data and previous 2 months if available
+  const getMonthsData = () => {
+    if (selectedMonth === -1) {
+      // If "All Months" selected, get the most recent 3 months
+      return yearData
+        .sort((a, b) => b.month - a.month)  // Sort by most recent first
+        .slice(0, 3);                       // Take most recent 3
+    } else {
+      // Find the index of the selected month in the sorted array
+      const sortedMonths = yearData.sort((a, b) => a.month - b.month);
+      const selectedMonthIndex = sortedMonths.findIndex(m => m.month === selectedMonth);
+      
+      if (selectedMonthIndex !== -1) {
+        // Get up to 3 months - the selected month and up to 2 previous
+        const startIndex = Math.max(0, selectedMonthIndex - 2);
+        return sortedMonths.slice(startIndex, selectedMonthIndex + 1);
+      } else {
+        // Fallback if selected month not found
+        return [];
+      }
+    }
+  };
+
+  // Filter data by selected year and month if specific month is selected
+  const filteredData = yearData.filter(data => {
+    if (selectedMonth === -1) {
+      return true; // All months for the year
+    } else {
+      return data.month === selectedMonth;
+    }
+  });
+  
+  // Data for the three months view
+  const monthsToShow = getMonthsData().reverse(); // Show in chronological order
   
   // Prepare data for category distribution chart
   const prepareCategoryData = (): CategoryEntry[] => {
@@ -256,8 +385,7 @@ const GroupedTransactions: React.FC<GroupedTransactionsProps> = ({ transactions,
     
     return Object.entries(categoryTotals)
       .map(([name, value]) => ({ name, value }))
-      .sort((a, b) => b.value - a.value)
-      .slice(0, 8); // Take top 8 categories for clarity
+      .sort((a, b) => b.value - a.value);
   };
   
   const categoryData = prepareCategoryData();
@@ -297,6 +425,14 @@ const GroupedTransactions: React.FC<GroupedTransactionsProps> = ({ transactions,
     return `${name}: ${(percent * 100).toFixed(0)}%`;
   };
   
+  // Map for converting Unknown category names to more descriptive labels
+  const getCategoryDisplayName = (name: string): string => {
+    if (name === 'Unknown') {
+      return 'Miscellaneous';
+    }
+    return name;
+  };
+  
   return (
     <Box sx={{ mb: 4 }}>
       <Grid container spacing={3} sx={{ mb: 3 }}>
@@ -317,7 +453,7 @@ const GroupedTransactions: React.FC<GroupedTransactionsProps> = ({ transactions,
           </FormControl>
         </Grid>
         
-        <Grid item xs={12} md={6}>
+        <Grid item xs={12} md={selectedView === 'category' ? 4 : 6}>
           <FormControl fullWidth>
             <InputLabel>Year</InputLabel>
             <Select
@@ -331,12 +467,29 @@ const GroupedTransactions: React.FC<GroupedTransactionsProps> = ({ transactions,
             </Select>
           </FormControl>
         </Grid>
+        
+        {selectedView === 'category' && (
+          <Grid item xs={12} md={4}>
+            <FormControl fullWidth>
+              <InputLabel>Month</InputLabel>
+              <Select
+                value={selectedMonth}
+                label="Month"
+                onChange={handleMonthChange}
+              >
+                {monthOptions.map(option => (
+                  <MenuItem key={option.value} value={option.value}>{option.label}</MenuItem>
+                ))}
+              </Select>
+            </FormControl>
+          </Grid>
+        )}
       </Grid>
       
       {/* Summary cards */}
       <Grid container spacing={3} sx={{ mb: 3 }}>
         <Grid item xs={12} md={3}>
-          <Card>
+          <Card sx={{ boxShadow: '0 2px 8px rgba(0,0,0,0.08)' }}>
             <CardContent>
               <Typography variant="h6" gutterBottom>Total Income</Typography>
               <Typography variant="h4" color="success.main">{formatCurrency(totalEarnings)}</Typography>
@@ -345,7 +498,7 @@ const GroupedTransactions: React.FC<GroupedTransactionsProps> = ({ transactions,
         </Grid>
         
         <Grid item xs={12} md={3}>
-          <Card>
+          <Card sx={{ boxShadow: '0 2px 8px rgba(0,0,0,0.08)' }}>
             <CardContent>
               <Typography variant="h6" gutterBottom>Total Expenses</Typography>
               <Typography variant="h4" color="error.main">{formatCurrency(totalExpenditures)}</Typography>
@@ -354,7 +507,7 @@ const GroupedTransactions: React.FC<GroupedTransactionsProps> = ({ transactions,
         </Grid>
         
         <Grid item xs={12} md={3}>
-          <Card>
+          <Card sx={{ boxShadow: '0 2px 8px rgba(0,0,0,0.08)' }}>
             <CardContent>
               <Typography variant="h6" gutterBottom>Total Savings</Typography>
               <Typography variant="h4" color="info.main">{formatCurrency(totalSavings)}</Typography>
@@ -363,7 +516,7 @@ const GroupedTransactions: React.FC<GroupedTransactionsProps> = ({ transactions,
         </Grid>
         
         <Grid item xs={12} md={3}>
-          <Card>
+          <Card sx={{ boxShadow: '0 2px 8px rgba(0,0,0,0.08)' }}>
             <CardContent>
               <Typography variant="h6" gutterBottom>Net Balance</Typography>
               <Typography variant="h4" color={totalBalance >= 0 ? 'success.main' : 'error.main'}>
@@ -378,134 +531,594 @@ const GroupedTransactions: React.FC<GroupedTransactionsProps> = ({ transactions,
       </Grid>
       
       {/* Charts based on selected view */}
-      <Paper sx={{ p: 3 }}>
+      <Paper sx={{ p: 3, boxShadow: '0 3px 10px rgba(0,0,0,0.08)' }}>
         <Box sx={{ height: 500 }}>
           {selectedView === 'monthly' && (
             <>
-              <Typography variant="h6" gutterBottom>Monthly Income and Expenses ({selectedYear})</Typography>
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart 
-                  data={filteredData} 
-                  margin={{ top: 20, right: 30, left: 20, bottom: 70 }}
-                >
-                  <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis 
-                    dataKey="name" 
-                    angle={-45} 
-                    textAnchor="end"
-                    height={80}
-                  />
-                  <YAxis />
-                  <Tooltip formatter={(value) => formatCurrency(Number(value))} />
-                  <Legend />
-                  <Bar name="Income" dataKey="earnings" fill="#82ca9d" />
-                  <Bar name="Expenses" dataKey="expenditures" fill="#ff8042" />
-                  <Bar name="Savings" dataKey="savings" fill="#8884d8" />
-                  <Bar name="Opening Balance" dataKey="openingBalance" fill="#82b1ff" />
-                </BarChart>
-              </ResponsiveContainer>
+              <Typography variant="h6" gutterBottom fontWeight="bold">Monthly Income and Expenses ({selectedYear})</Typography>
+              <Box sx={{ height: '100%', width: '100%' }}>
+                <BarChart
+                  options={{
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                      x: {
+                        ticks: {
+                          maxRotation: 45,
+                          minRotation: 45
+                        }
+                      },
+                      y: {
+                        beginAtZero: true,
+                        ticks: {
+                          callback: (value) => formatCurrency(Number(value))
+                        }
+                      }
+                    },
+                    plugins: {
+                      tooltip: {
+                        callbacks: {
+                          label: function(context) {
+                            return `${context.dataset.label}: ${formatCurrency(context.raw as number)}`;
+                          }
+                        }
+                      }
+                    }
+                  }}
+                  data={{
+                    labels: filteredData.map(item => item.name),
+                    datasets: [
+                      {
+                        label: 'Income',
+                        data: filteredData.map(item => item.earnings),
+                        backgroundColor: '#82ca9d',
+                      },
+                      {
+                        label: 'Expenses',
+                        data: filteredData.map(item => item.expenditures),
+                        backgroundColor: '#ff8042',
+                      },
+                      {
+                        label: 'Savings',
+                        data: filteredData.map(item => item.savings),
+                        backgroundColor: '#8884d8',
+                      },
+                      {
+                        label: 'Opening Balance',
+                        data: filteredData.map(item => item.openingBalance),
+                        backgroundColor: '#82b1ff',
+                      },
+                    ],
+                  }}
+                />
+              </Box>
             </>
           )}
           
           {selectedView === 'category' && (
             <>
-              <Typography variant="h6" gutterBottom>Category Distribution ({selectedYear})</Typography>
-              <Grid container>
-                <Grid item xs={12} md={7}>
-                  <ResponsiveContainer width="100%" height={400}>
-                    <PieChart>
-                      <Pie
-                        data={categoryData}
-                        cx="50%"
-                        cy="50%"
-                        labelLine={false}
-                        label={renderPieLabel}
-                        outerRadius={150}
-                        fill="#8884d8"
-                        dataKey="value"
-                      >
-                        {categoryData.map((entry, index) => (
-                          <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                        ))}
-                      </Pie>
-                      <Tooltip formatter={(value) => formatCurrency(Number(value))} />
-                    </PieChart>
-                  </ResponsiveContainer>
-                </Grid>
-                <Grid item xs={12} md={5}>
-                  <Box sx={{ mt: 5 }}>
-                    {categoryData.map((entry, index) => (
-                      <Box key={index} sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
-                        <Box 
-                          sx={{ 
-                            width: 16, 
-                            height: 16, 
-                            bgcolor: COLORS[index % COLORS.length], 
-                            mr: 1,
-                            borderRadius: '2px' 
-                          }} 
-                        />
-                        <Typography variant="body2">
-                          {entry.name}: {formatCurrency(entry.value)}
+              <Typography variant="h6" gutterBottom fontWeight="bold">
+                Category Distribution ({selectedYear}{selectedMonth !== -1 ? ` - ${monthNames[selectedMonth]}` : ''})
+              </Typography>
+
+              {monthsToShow.length === 0 ? (
+                <Typography variant="body1">No data available for the selected month(s).</Typography>
+              ) : (
+                monthsToShow.map((monthData, monthIndex) => {
+                  // Process month's category data to organize by parent categories
+                  const processMonthCategories = (): {
+                    parentCategories: CategoryEntry[],
+                    categoryBreakdown: ParentCategoryWithSubcategories[]
+                  } => {
+                    // Define the main parent categories for expenses
+                    const PARENT_CATEGORIES = {
+                      EXPENDITURES: { id: 2, name: "Expenditures" },
+                      SAVINGS: { id: 3, name: "Savings" },
+                      EARNINGS: { id: 1, name: "Earnings" }
+                    };
+
+                    // Get the basic parent category structure from the database
+                    const categoryNameToId: {[name: string]: number} = {};
+                    const categoryIdToName: {[id: number]: string} = {};
+                    const categoryParentMap: {[id: number]: number | null} = {};
+                    
+                    // Pre-populate with known parent categories to avoid "Unknown" labels
+                    Object.values(PARENT_CATEGORIES).forEach(cat => {
+                      categoryIdToName[cat.id] = cat.name;
+                    });
+    
+                    // Map known categories
+                    categories.forEach(cat => {
+                      if (cat.id) {
+                        categoryNameToId[cat.name] = cat.id;
+                        categoryIdToName[cat.id] = cat.name;
+                        categoryParentMap[cat.id] = cat.parent_id || null;
+                      }
+                    });
+
+                    // Define category mappings for transaction categories
+                    const categoryMappings: {[key: string]: number} = {
+                      // Expenditure categories
+                      "Grocery": PARENT_CATEGORIES.EXPENDITURES.id,
+                      "Utilities": PARENT_CATEGORIES.EXPENDITURES.id,
+                      "Entertainment": PARENT_CATEGORIES.EXPENDITURES.id,
+                      "School": PARENT_CATEGORIES.EXPENDITURES.id,
+                      "Others": PARENT_CATEGORIES.EXPENDITURES.id,
+                      "Rent": PARENT_CATEGORIES.EXPENDITURES.id,
+                      
+                      // Savings categories
+                      "Revolute": PARENT_CATEGORIES.SAVINGS.id,
+                      "Holiday": PARENT_CATEGORIES.SAVINGS.id,
+                      "Recurring Deposits": PARENT_CATEGORIES.SAVINGS.id,
+                      "Fixed Deposits": PARENT_CATEGORIES.SAVINGS.id,
+                      "eToro": PARENT_CATEGORIES.SAVINGS.id,
+                      
+                      // Earnings categories
+                      "Salary": PARENT_CATEGORIES.EARNINGS.id
+                    };
+                                
+                    // Step 2: Group expenses by parent category
+                    const parentCategoryTotals: {[parentId: number]: number} = {};
+                    // Track uncategorized separately
+                    const uncategorizedTotal = {value: 0};
+                    const categoryToParentId: {[catId: number]: number} = {};
+                    const childCategories: {[parentId: number]: {[childId: number]: number}} = {};
+                                
+                    // Map of financial terms to descriptive category names for replacing "Unknown" labels
+                    const financialTermsMap: {[term: string]: string} = {
+                      "transfer": "Transfers",
+                      "online": "Online Payments",
+                      "card": "Card Payments",
+                      "payment": "Regular Payments",
+                      "direct debit": "Direct Debits",
+                      "standing order": "Standing Orders",
+                      "cash": "Cash Withdrawals",
+                      "fee": "Bank Fees",
+                      "interest": "Interest",
+                      "grocery": "Groceries",
+                      "food": "Food & Dining",
+                      "restaurant": "Restaurants",
+                      "uber": "Transport",
+                      "transport": "Transportation",
+                      "rent": "Housing/Rent",
+                      "salary": "Income/Salary",
+                      "subscription": "Subscriptions",
+                      "utility": "Utilities",
+                      "tax": "Taxes",
+                      "insurance": "Insurance"
+                    };
+              
+                    // Process all transaction categories and group them appropriately
+                    Object.entries(monthData.categories).forEach(([categoryName, amount]) => {
+                      const absAmount = Math.abs(amount);
+                      
+                      // Determine the parent category for this transaction
+                      let parentId = -1; // Default to uncategorized
+                      
+                      // Try to find a mapping for this category name
+                      if (categoryMappings[categoryName] !== undefined) {
+                        parentId = categoryMappings[categoryName];
+                      } else {
+                        // Try case-insensitive matching
+                        const lowerCategoryName = categoryName.toLowerCase();
+                        for (const [knownCategory, mappedParentId] of Object.entries(categoryMappings)) {
+                          if (lowerCategoryName.includes(knownCategory.toLowerCase()) || 
+                              knownCategory.toLowerCase().includes(lowerCategoryName)) {
+                            parentId = mappedParentId;
+                            break;
+                          }
+                        }
+                        
+                        if (parentId === -1) {
+                          // Determine parent by transaction type (credit vs debit)
+                          if (amount > 0) {
+                            parentId = PARENT_CATEGORIES.EARNINGS.id;
+                          } else {
+                            // Classify as expenditure if not known
+                            parentId = PARENT_CATEGORIES.EXPENDITURES.id;
+                          }
+                        }
+                      }
+                      
+                      // Create a synthetic category ID for this transaction category if needed
+                      let catId = categoryNameToId[categoryName];
+                      if (catId === undefined) {
+                        // Create a synthetic ID
+                        catId = 1000 + Object.keys(categoryNameToId).length;
+                        categoryNameToId[categoryName] = catId;
+                        
+                        // Try to create a more descriptive name if this is "Unknown"
+                        if (categoryName === 'Unknown') {
+                          let betterName = 'Miscellaneous';
+                          // Check transaction description for known terms
+                          for (const [term, descriptiveName] of Object.entries(financialTermsMap)) {
+                            if (categoryName.toLowerCase().includes(term)) {
+                              betterName = descriptiveName;
+                              break;
+                            }
+                          }
+                          categoryIdToName[catId] = betterName;
+                        } else {
+                          categoryIdToName[catId] = categoryName;
+                        }
+                        
+                        categoryParentMap[catId] = parentId;
+                      }
+                      
+                      // Now process the transaction with proper parent/child relationship
+                      // Track child -> parent relationship
+                      categoryToParentId[catId] = parentId;
+                      
+                      // Add to child categories for this parent
+                      if (!childCategories[parentId]) {
+                        childCategories[parentId] = {};
+                      }
+                      if (!childCategories[parentId][catId]) {
+                        childCategories[parentId][catId] = 0;
+                      }
+                      childCategories[parentId][catId] += absAmount;
+                      
+                      // Add to parent total
+                      if (!parentCategoryTotals[parentId]) {
+                        parentCategoryTotals[parentId] = 0;
+                      }
+                      parentCategoryTotals[parentId] += absAmount;
+                    });
+                                
+                    // Convert to arrays for charts
+                    const parentCats: CategoryEntry[] = Object.entries(parentCategoryTotals).map(([idStr, value]) => {
+                      const id = parseInt(idStr);
+                      const name = id === -1 ? 'Uncategorized' : categoryIdToName[id] || 'Miscellaneous';
+                      return { id, name, value };
+                    }).sort((a, b) => b.value - a.value);
+                    
+                    // Process subcategories for each parent
+                    const breakdown: ParentCategoryWithSubcategories[] = [];
+                    
+                    Object.entries(childCategories).forEach(([parentIdStr, children]) => {
+                      const parentId = parseInt(parentIdStr);
+                      const parentName = categoryIdToName[parentId] || 'Miscellaneous';
+                      
+                      const subcats = Object.entries(children).map(([childIdStr, value]) => {
+                        const childId = parseInt(childIdStr);
+                        const childName = categoryIdToName[childId] || 'Miscellaneous';
+                        return { name: childName, value };
+                      }).sort((a, b) => b.value - a.value);
+                      
+                      if (subcats.length > 0) {
+                        breakdown.push({
+                          parentId,
+                          parentName,
+                          total: parentCategoryTotals[parentId] || 0,
+                          subcategories: subcats
+                        });
+                      }
+                    });
+                    
+                    // Add direct expenses (not from subcategories) as "Other" in each parent
+                    breakdown.forEach(parent => {
+                      const subcatTotal = parent.subcategories.reduce((sum, cat) => sum + cat.value, 0);
+                      const directExpenses = parent.total - subcatTotal;
+                      
+                      if (directExpenses > 0) {
+                        parent.subcategories.push({
+                          name: 'Direct Expenses',
+                          value: directExpenses
+                        });
+                      }
+                    });
+                    
+                    return {
+                      parentCategories: parentCats,
+                      categoryBreakdown: breakdown.sort((a, b) => b.total - a.total)
+                    };
+                  };
+                  
+                  const { parentCategories, categoryBreakdown } = processMonthCategories();
+
+                  return (
+                    <Box key={monthIndex} sx={{ mb: 8 }}>
+                      <Typography variant="h6" sx={{ mb: 2 }}>
+                        {monthData.name}
+                      </Typography>
+
+                      {/* Monthly summary cards */}
+                      <Grid container spacing={2} sx={{ mb: 3 }}>
+                        <Grid item xs={12} md={4}>
+                          <Card>
+                            <CardContent>
+                              <Typography variant="body1" color="text.secondary">Income</Typography>
+                              <Typography variant="h6" color="success.main">{formatCurrency(monthData.earnings)}</Typography>
+                            </CardContent>
+                          </Card>
+                        </Grid>
+                        <Grid item xs={12} md={4}>
+                          <Card>
+                            <CardContent>
+                              <Typography variant="body1" color="text.secondary">Expenses</Typography>
+                              <Typography variant="h6" color="error.main">{formatCurrency(monthData.expenditures)}</Typography>
+                            </CardContent>
+                          </Card>
+                        </Grid>
+                        <Grid item xs={12} md={4}>
+                          <Card>
+                            <CardContent>
+                              <Typography variant="body1" color="text.secondary">Savings</Typography>
+                              <Typography variant="h6" color="info.main">{formatCurrency(monthData.savings)}</Typography>
+                            </CardContent>
+                          </Card>
+                        </Grid>
+                      </Grid>
+
+                      {/* Parent Categories Pie Chart */}
+                      <Paper sx={{ p: 3, mb: 4 }}>
+                        <Typography variant="h6" align="center" gutterBottom>
+                          Parent Category Breakdown
                         </Typography>
-                      </Box>
-                    ))}
-                  </Box>
-                </Grid>
-              </Grid>
+                        
+                        <Grid container spacing={2}>
+                          <Grid item xs={12} md={7}>
+                            {parentCategories.length > 0 ? (
+                              <Box sx={{ height: 300, overflowY: 'auto', p: 2, border: '1px solid #eee', borderRadius: 2 }}>
+                                <Typography variant="h6" gutterBottom align="center">Visual Breakdown</Typography>
+                                {parentCategories.map((category, idx) => (
+                                  <Box 
+                                    key={`chart-${monthIndex}-${idx}`}
+                                    sx={{ 
+                                      mb: 2,
+                                      p: 1.5,
+                                      borderRadius: 1,
+                                      bgcolor: 'rgba(0,0,0,0.02)'
+                                    }}
+                                  >
+                                    <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1 }}>
+                                      <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                                        <Box 
+                                          sx={{ 
+                                            width: 16, 
+                                            height: 16, 
+                                            bgcolor: COLORS[idx % COLORS.length], 
+                                            mr: 1,
+                                            borderRadius: 1 
+                                          }} 
+                                        />
+                                        <Typography variant="subtitle1"><b>{category.name}</b></Typography>
+                                      </Box>
+                                      <Typography variant="subtitle1" fontWeight="bold">
+                                        {formatCurrency(category.value || 0)}
+                                      </Typography>
+                                    </Box>
+                                    
+                                    <Box 
+                                      sx={{ 
+                                        width: '100%', 
+                                        height: 10, 
+                                        bgcolor: 'rgba(0,0,0,0.05)',
+                                        borderRadius: 5,
+                                        overflow: 'hidden'
+                                      }}
+                                    >
+                                      <Box 
+                                        sx={{ 
+                                          width: `${(category.value / parentCategories.reduce((sum, c) => sum + (c.value || 0), 0) * 100).toFixed(0)}%`, 
+                                          height: '100%',
+                                          bgcolor: COLORS[idx % COLORS.length],
+                                          transition: 'width 1s ease-in-out'
+                                        }}
+                                      />
+                                    </Box>
+                                  </Box>
+                                ))}
+                              </Box>
+                            ) : (
+                              <Box sx={{ height: 300, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                <Typography variant="body2" color="text.secondary">
+                                  No expense data available
+                                </Typography>
+                              </Box>
+                            )}
+                          </Grid>
+                          <Grid item xs={12} md={5}>
+                            <Typography variant="subtitle1" gutterBottom>Parent Categories</Typography>
+                            <Box sx={{ maxHeight: 250, overflowY: 'auto' }}>
+                              {parentCategories.map((cat, idx) => (
+                                <Box 
+                                  key={`legend-${monthIndex}-${idx}`} 
+                                  sx={{ 
+                                    display: 'flex', 
+                                    alignItems: 'center', 
+                                    justifyContent: 'space-between',
+                                    mb: 1,
+                                    p: 0.5,
+                                    borderRadius: 1,
+                                    '&:hover': { bgcolor: 'rgba(0, 0, 0, 0.04)' }
+                                  }}
+                                >
+                                  <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                                    <Box 
+                                      sx={{ 
+                                        width: 16, 
+                                        height: 16, 
+                                        bgcolor: COLORS[idx % COLORS.length], 
+                                        mr: 1,
+                                        borderRadius: 1 
+                                      }} 
+                                    />
+                                    <Typography variant="body2">{cat.name}</Typography>
+                                  </Box>
+                                  <Typography variant="body2" fontWeight="bold">
+                                    {formatCurrency(cat.value)}
+                                  </Typography>
+                                </Box>
+                              ))}
+                            </Box>
+                          </Grid>
+                        </Grid>
+                      </Paper>
+
+                      {/* Subcategory Bar Charts */}
+                      {categoryBreakdown.length > 0 && (
+                        <Box>
+                          <Typography variant="h6" sx={{ mt: 4, mb: 3 }}>
+                            Subcategory Breakdowns
+                          </Typography>
+                          
+                          <Grid container spacing={3}>
+                            {categoryBreakdown.slice(0, 6).map((parentData, parentIdx) => (
+                              <Grid item xs={12} md={6} key={`parent-${monthIndex}-${parentIdx}`}>
+                                <Paper sx={{ p: 2, height: '100%' }}>
+                                  <Typography 
+                                    variant="subtitle1" 
+                                    align="center" 
+                                    gutterBottom
+                                    sx={{ 
+                                      display: 'flex', 
+                                      alignItems: 'center', 
+                                      justifyContent: 'center' 
+                                    }}
+                                  >
+                                    <Box 
+                                      sx={{ 
+                                        width: 12, 
+                                        height: 12, 
+                                        bgcolor: COLORS[parentIdx % COLORS.length], 
+                                        mr: 1,
+                                        display: 'inline-block',
+                                        borderRadius: 1 
+                                      }} 
+                                    />
+                                    {parentData.parentName} ({formatCurrency(parentData.total)})
+                                  </Typography>
+                                  
+                                  <Box sx={{ width: '100%', height: 200 }}>
+                                    <BarChart
+                                      options={{
+                                        responsive: true,
+                                        maintainAspectRatio: false,
+                                        indexAxis: 'y',
+                                        scales: {
+                                          x: {
+                                            beginAtZero: true,
+                                            ticks: {
+                                              callback: (value) => formatCurrency(Number(value))
+                                            }
+                                          },
+                                          y: {
+                                            ticks: {
+                                              font: {
+                                                size: 12
+                                              }
+                                            }
+                                          }
+                                        },
+                                        plugins: {
+                                          tooltip: {
+                                            callbacks: {
+                                              label: function(context) {
+                                                return `Amount: ${formatCurrency(context.raw as number)}`;
+                                              }
+                                            }
+                                          }
+                                        }
+                                      }}
+                                      data={{
+                                        labels: parentData.subcategories.sort((a, b) => b.value - a.value).map(cat => cat.name),
+                                        datasets: [
+                                          {
+                                            label: 'Amount',
+                                            data: parentData.subcategories.sort((a, b) => b.value - a.value).map(cat => cat.value),
+                                            backgroundColor: COLORS[parentIdx % COLORS.length],
+                                            barPercentage: 0.8,
+                                          }
+                                        ]
+                                      }}
+                                    />
+                                  </Box>
+                                </Paper>
+                              </Grid>
+                            ))}
+                          </Grid>
+                        </Box>
+                      )}
+                    </Box>
+                  );
+                })
+              )}
             </>
           )}
           
           {selectedView === 'trend' && (
             <>
               <Typography variant="h6" gutterBottom>Spending Trend ({selectedYear})</Typography>
-              <ResponsiveContainer width="100%" height="100%">
-                <AreaChart
-                  data={filteredData}
-                  margin={{ top: 20, right: 30, left: 20, bottom: 70 }}
-                >
-                  <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis 
-                    dataKey="name" 
-                    angle={-45} 
-                    textAnchor="end"
-                    height={80}
-                  />
-                  <YAxis />
-                  <Tooltip formatter={(value) => formatCurrency(Number(value))} />
-                  <Legend />
-                  <Area 
-                    type="monotone" 
-                    name="Balance" 
-                    dataKey="balance" 
-                    stroke="#8884d8" 
-                    fill="#8884d8" 
-                    fillOpacity={0.3} 
-                  />
-                  <Line 
-                    type="monotone" 
-                    name="Income" 
-                    dataKey="earnings" 
-                    stroke="#82ca9d" 
-                    strokeWidth={2} 
-                  />
-                  <Line 
-                    type="monotone" 
-                    name="Expenses" 
-                    dataKey="expenditures" 
-                    stroke="#ff7300" 
-                    strokeWidth={2} 
-                  />
-                  <Line 
-                    type="monotone" 
-                    name="Savings" 
-                    dataKey="savings" 
-                    stroke="#00C49F" 
-                    strokeWidth={2} 
-                    strokeDasharray="5 5" 
-                  />
-                </AreaChart>
-              </ResponsiveContainer>
+              <Box sx={{ height: '100%', width: '100%' }}>
+                <LineChart
+                  options={{
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                      x: {
+                        ticks: {
+                          maxRotation: 45,
+                          minRotation: 45
+                        }
+                      },
+                      y: {
+                        beginAtZero: true,
+                        ticks: {
+                          callback: (value) => formatCurrency(Number(value))
+                        }
+                      }
+                    },
+                    plugins: {
+                      tooltip: {
+                        callbacks: {
+                          label: function(context) {
+                            return `${context.dataset.label}: ${formatCurrency(context.raw as number)}`;
+                          }
+                        }
+                      }
+                    }
+                  }}
+                  data={{
+                    labels: filteredData.map(item => item.name),
+                    datasets: [
+                      {
+                        label: 'Balance',
+                        data: filteredData.map(item => item.balance),
+                        borderColor: '#8884d8',
+                        backgroundColor: 'rgba(136, 132, 216, 0.3)',
+                        fill: true,
+                        tension: 0.1,
+                      },
+                      {
+                        label: 'Income',
+                        data: filteredData.map(item => item.earnings),
+                        borderColor: '#82ca9d',
+                        backgroundColor: 'transparent',
+                        borderWidth: 2,
+                        tension: 0.1,
+                      },
+                      {
+                        label: 'Expenses',
+                        data: filteredData.map(item => item.expenditures),
+                        borderColor: '#ff7300',
+                        backgroundColor: 'transparent',
+                        borderWidth: 2,
+                        tension: 0.1,
+                      },
+                      {
+                        label: 'Savings',
+                        data: filteredData.map(item => item.savings),
+                        borderColor: '#00C49F',
+                        backgroundColor: 'transparent',
+                        borderWidth: 2,
+                        borderDash: [5, 5],
+                        tension: 0.1,
+                      },
+                    ]
+                  }}
+                />
+              </Box>
             </>
           )}
           
@@ -514,32 +1127,51 @@ const GroupedTransactions: React.FC<GroupedTransactionsProps> = ({ transactions,
               <Typography variant="h6" gutterBottom>Savings Analysis ({selectedYear})</Typography>
               <Grid container>
                 <Grid item xs={12} md={6}>
-                  <ResponsiveContainer width="100%" height={400}>
-                    <PieChart>
-                      <Pie
-                        data={[
-                          { name: 'Expenses', value: totalExpenditures },
-                          { name: 'Savings', value: totalSavings },
-                          { name: 'Remaining Income', value: Math.max(0, totalEarnings - totalExpenditures - totalSavings) }
-                        ]}
-                        cx="50%"
-                        cy="50%"
-                        labelLine={true}
-                        outerRadius={150}
-                        fill="#8884d8"
-                        dataKey="value"
-                        label={({ name, percent }) => 
-                          percent ? `${name}: ${(percent * 100).toFixed(1)}%` : ''
-                        }
-                      >
-                        <Cell fill="#ff8042" />
-                        <Cell fill="#00C49F" />
-                        <Cell fill="#82ca9d" />
-                      </Pie>
-                      <Tooltip formatter={(value) => formatCurrency(Number(value))} />
-                      <Legend />
-                    </PieChart>
-                  </ResponsiveContainer>
+                  <Box sx={{ height: 400, width: '100%' }}>
+                            <PieChart
+                              options={{
+                                responsive: true,
+                                maintainAspectRatio: false,
+                                plugins: {
+                                  tooltip: {
+                                    callbacks: {
+                                      label: function(context) {
+                                        const dataLabel = context.label;
+                                        const value = context.raw as number;
+                                        const percentage = ((value / totalExpenditures) * 100).toFixed(1);
+                                        return `${dataLabel}: ${formatCurrency(value)} (${percentage}%)`;
+                                      }
+                                    }
+                                  },
+                                  legend: {
+                                    position: 'bottom',
+                                    labels: {
+                                      boxWidth: 15,
+                                      padding: 10
+                                    }
+                                  }
+                                }
+                              }}
+                      data={{
+                        labels: ['Expenses', 'Savings', 'Remaining Income'],
+                        datasets: [
+                          {
+                            data: [
+                              totalExpenditures,
+                              totalSavings,
+                              Math.max(0, totalEarnings - totalExpenditures - totalSavings)
+                            ],
+                            backgroundColor: [
+                              '#ff8042', 
+                              '#00C49F', 
+                              '#82ca9d'
+                            ],
+                            hoverOffset: 4
+                          }
+                        ]
+                      }}
+                    />
+                  </Box>
                 </Grid>
                 <Grid item xs={12} md={6}>
                   <Box sx={{ mt: 3, p: 2 }}>
