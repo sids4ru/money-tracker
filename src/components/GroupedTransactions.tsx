@@ -533,7 +533,7 @@ const GroupedTransactions: React.FC<GroupedTransactionsProps> = ({ transactions,
       
       {/* Charts based on selected view */}
       <Paper sx={{ p: 3, boxShadow: '0 3px 10px rgba(0,0,0,0.08)' }}>
-        <Box sx={{ height: 500 }}>
+        <Box sx={{ minHeight: 500 }}>
           {selectedView === 'monthly' && (
             <>
               <Typography variant="h6" gutterBottom fontWeight="bold">Monthly Income and Expenses ({selectedYear})</Typography>
@@ -935,7 +935,7 @@ const GroupedTransactions: React.FC<GroupedTransactionsProps> = ({ transactions,
                         <Grid container spacing={2}>
                           <Grid item xs={12} md={7}>
                             {parentCategories.length > 0 ? (
-                              <Box sx={{ height: 300, overflowY: 'auto', p: 2, border: '1px solid #eee', borderRadius: 2 }}>
+                              <Box sx={{ minHeight: 300, p: 2, border: '1px solid #eee', borderRadius: 2 }}>
                                 <Typography variant="h6" gutterBottom align="center">Visual Breakdown</Typography>
                                 {parentCategories.map((category, idx) => (
                                   <Box 
@@ -987,7 +987,7 @@ const GroupedTransactions: React.FC<GroupedTransactionsProps> = ({ transactions,
                                 ))}
                               </Box>
                             ) : (
-                              <Box sx={{ height: 300, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                              <Box sx={{ minHeight: 300, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                                 <Typography variant="body2" color="text.secondary">
                                   No expense data available
                                 </Typography>
@@ -1066,7 +1066,7 @@ const GroupedTransactions: React.FC<GroupedTransactionsProps> = ({ transactions,
                                     {parentData.parentName} ({formatCurrency(parentData.total)})
                                   </Typography>
                                   
-                                  <Box sx={{ width: '100%', height: 200 }}>
+                                  <Box sx={{ width: '100%', minHeight: 200 }}>
                                     <BarChart
                                       options={{
                                         responsive: true,
@@ -1203,7 +1203,7 @@ const GroupedTransactions: React.FC<GroupedTransactionsProps> = ({ transactions,
               <Typography variant="h6" gutterBottom>Savings Analysis ({selectedYear})</Typography>
               <Grid container>
                 <Grid item xs={12} md={6}>
-                  <Box sx={{ height: 400, width: '100%' }}>
+                  <Box sx={{ minHeight: 400, width: '100%' }}>
                             <PieChart
                               options={{
                                 responsive: true,

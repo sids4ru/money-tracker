@@ -287,7 +287,7 @@ const TransactionList: React.FC<TransactionListProps> = ({ transactions, isLoadi
         </Box>
       ) : (
         <>
-          <TableContainer sx={{ maxHeight: 'calc(100vh - 280px)' }}>
+          <TableContainer>
             <Table stickyHeader aria-label="transactions table">
               <TableHead>
                 <TableRow>
