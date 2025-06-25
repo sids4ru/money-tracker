@@ -610,24 +610,52 @@ const GroupedTransactions: React.FC<GroupedTransactionsProps> = ({ transactions,
                     parentCategories: CategoryEntry[],
                     categoryBreakdown: ParentCategoryWithSubcategories[]
                   } => {
-                    // Define the main parent categories for expenses
-                    const PARENT_CATEGORIES = {
-                      EXPENDITURES: { id: 2, name: "Expenditures" },
-                      SAVINGS: { id: 3, name: "Savings" },
-                      EARNINGS: { id: 1, name: "Earnings" }
+                    // Extract parent categories from the categoryHierarchy
+                    const rootCategories = Object.values(categoryHierarchy)
+                      .filter(cat => !cat.parent_id) // Only root categories
+                      .sort((a, b) => a.id - b.id);    // Sort by ID for stability
+                    
+                    // Create a mapping for parent categories based on actual data
+                    const PARENT_CATEGORIES: {[key: string]: {id: number, name: string}} = {};
+                    
+                    // Find the main category types (income, expenses, savings) from actual data
+                    // or create defaults if they don't exist
+                    const findCatByName = (name: string): {id: number, name: string, parent_id?: number | null, children?: number[]} | undefined => {
+                      return rootCategories.find(c => c.name.toLowerCase().includes(name.toLowerCase()));
+                    };
+                    
+                    const EARNINGS_CAT = findCatByName('earning') || findCatByName('income') || 
+                                       { id: 1, name: "Earnings" };
+                    const EXPENDITURES_CAT = findCatByName('expenditure') || findCatByName('expense') || 
+                                            { id: 2, name: "Expenditures" };
+                    const SAVINGS_CAT = findCatByName('saving') || findCatByName('investment') || 
+                                       { id: 3, name: "Savings" };
+                    
+                    // Use the found categories or fallbacks
+                    PARENT_CATEGORIES['EARNINGS'] = { 
+                      id: EARNINGS_CAT.id, 
+                      name: EARNINGS_CAT.name 
+                    };
+                    PARENT_CATEGORIES['EXPENDITURES'] = { 
+                      id: EXPENDITURES_CAT.id, 
+                      name: EXPENDITURES_CAT.name 
+                    };
+                    PARENT_CATEGORIES['SAVINGS'] = { 
+                      id: SAVINGS_CAT.id, 
+                      name: SAVINGS_CAT.name 
                     };
 
-                    // Get the basic parent category structure from the database
+                    // Initialize mapping structures
                     const categoryNameToId: {[name: string]: number} = {};
                     const categoryIdToName: {[id: number]: string} = {};
                     const categoryParentMap: {[id: number]: number | null} = {};
                     
-                    // Pre-populate with known parent categories to avoid "Unknown" labels
+                    // Pre-populate with parent categories to avoid "Unknown" labels
                     Object.values(PARENT_CATEGORIES).forEach(cat => {
                       categoryIdToName[cat.id] = cat.name;
                     });
     
-                    // Map known categories
+                    // Map all known categories from database
                     categories.forEach(cat => {
                       if (cat.id) {
                         categoryNameToId[cat.name] = cat.id;
@@ -636,8 +664,43 @@ const GroupedTransactions: React.FC<GroupedTransactionsProps> = ({ transactions,
                       }
                     });
 
-                    // Define category mappings for transaction categories
-                    const categoryMappings: {[key: string]: number} = {
+                    // Build dynamic category mappings based on the actual categories
+                    const categoryMappings: {[key: string]: number} = {};
+                    
+                    // Helper function to categorize by name pattern
+                    const categorizeByName = (categoryName: string): number => {
+                      const lowerName = categoryName.toLowerCase();
+                      
+                      // Check for keywords that indicate a category type
+                      if (lowerName.includes('salary') || lowerName.includes('income') || 
+                          lowerName.includes('earnings') || lowerName.includes('revenue')) {
+                        return PARENT_CATEGORIES.EARNINGS.id;
+                      }
+                      
+                      if (lowerName.includes('saving') || lowerName.includes('investment') || 
+                          lowerName.includes('deposit') || lowerName.includes('etoro') ||
+                          lowerName.includes('revolut') || lowerName.includes('trading')) {
+                        return PARENT_CATEGORIES.SAVINGS.id;
+                      }
+                      
+                      // Default to expenditures for negative amounts or if we can't determine
+                      return PARENT_CATEGORIES.EXPENDITURES.id;
+                    };
+                    
+                    // Map subcategories based on their parent in the hierarchy
+                    Object.entries(categoryHierarchy).forEach(([catIdStr, catInfo]) => {
+                      const parentId = catInfo.parent_id;
+                      if (parentId) {
+                        // If it has a parent, map it to that parent's ID
+                        categoryMappings[catInfo.name] = parentId;
+                      } else {
+                        // For root categories, try to map to one of our main parent categories
+                        categoryMappings[catInfo.name] = categorizeByName(catInfo.name);
+                      }
+                    });
+                    
+                    // Add common category names for better auto-categorization
+                    const commonCategoryMappings: {[key: string]: number} = {
                       // Expenditure categories
                       "Grocery": PARENT_CATEGORIES.EXPENDITURES.id,
                       "Utilities": PARENT_CATEGORIES.EXPENDITURES.id,
@@ -645,17 +708,31 @@ const GroupedTransactions: React.FC<GroupedTransactionsProps> = ({ transactions,
                       "School": PARENT_CATEGORIES.EXPENDITURES.id,
                       "Others": PARENT_CATEGORIES.EXPENDITURES.id,
                       "Rent": PARENT_CATEGORIES.EXPENDITURES.id,
+                      "Shopping": PARENT_CATEGORIES.EXPENDITURES.id,
+                      "Transport": PARENT_CATEGORIES.EXPENDITURES.id,
+                      "Food": PARENT_CATEGORIES.EXPENDITURES.id,
                       
                       // Savings categories
-                      "Revolute": PARENT_CATEGORIES.SAVINGS.id,
+                      "Revolut": PARENT_CATEGORIES.SAVINGS.id,
                       "Holiday": PARENT_CATEGORIES.SAVINGS.id,
                       "Recurring Deposits": PARENT_CATEGORIES.SAVINGS.id,
                       "Fixed Deposits": PARENT_CATEGORIES.SAVINGS.id,
                       "eToro": PARENT_CATEGORIES.SAVINGS.id,
+                      "Investments": PARENT_CATEGORIES.SAVINGS.id,
                       
                       // Earnings categories
-                      "Salary": PARENT_CATEGORIES.EARNINGS.id
+                      "Salary": PARENT_CATEGORIES.EARNINGS.id,
+                      "Income": PARENT_CATEGORIES.EARNINGS.id,
+                      "Bonus": PARENT_CATEGORIES.EARNINGS.id
                     };
+                    
+                    // Add common mappings if they don't already exist
+                    Object.entries(commonCategoryMappings).forEach(([name, parentId]) => {
+                      // Only add if we don't already have this category
+                      if (!categoryMappings[name]) {
+                        categoryMappings[name] = parentId;
+                      }
+                    });
                                 
                     // Step 2: Group expenses by parent category
                     const parentCategoryTotals: {[parentId: number]: number} = {};
@@ -765,8 +842,8 @@ const GroupedTransactions: React.FC<GroupedTransactionsProps> = ({ transactions,
                       parentCategoryTotals[parentId] += absAmount;
                     });
                                 
-                    // Convert to arrays for charts
-                    const parentCats: CategoryEntry[] = Object.entries(parentCategoryTotals).map(([idStr, value]) => {
+                    // Convert to arrays for charts - this creates actual CategoryEntry[] for visualization
+                    const chartCategories: CategoryEntry[] = Object.entries(parentCategoryTotals).map(([idStr, value]) => {
                       const id = parseInt(idStr);
                       const name = id === -1 ? 'Uncategorized' : categoryIdToName[id] || 'Miscellaneous';
                       return { id, name, value };
@@ -809,7 +886,7 @@ const GroupedTransactions: React.FC<GroupedTransactionsProps> = ({ transactions,
                     });
                     
                     return {
-                      parentCategories: parentCats,
+                      parentCategories: chartCategories,
                       categoryBreakdown: breakdown.sort((a, b) => b.total - a.total)
                     };
                   };
