@@ -316,9 +316,18 @@ export const CategoryController = {
         // Skip if it's the same transaction
         if (similarTransaction.id === transactionId) continue;
         
-        // Skip if this transaction already has a manual category assignment
-        if (similarTransaction.grouping_status === 'manual') {
-          console.log(`Skipping similar transaction ID ${similarTransaction.id} because it's already manually categorized`);
+        // Debug log to check what's in the transaction object
+        console.log(`Transaction ID ${similarTransaction.id} - grouping_status: ${similarTransaction.grouping_status}`);
+        
+        // Get the full transaction details to ensure we have all fields
+        const fullTransactionDetails = await TransactionModel.getById(similarTransaction.id!);
+        console.log(`Full transaction details - grouping_status: ${fullTransactionDetails?.grouping_status}`);
+        
+        // Skip if this transaction already has any category assignment (manual or auto)
+        // Using the full transaction details to ensure we have the correct status
+        if (fullTransactionDetails && 
+            (fullTransactionDetails.grouping_status === 'manual' || fullTransactionDetails.grouping_status === 'auto')) {
+          console.log(`Skipping similar transaction ID ${similarTransaction.id} because it's already categorized (${fullTransactionDetails.grouping_status})`);
           continue;
         }
         
