@@ -261,8 +261,15 @@ export const CategoryController = {
    */
   async assignTransactionCategory(req: Request, res: Response): Promise<void> {
     try {
+      console.log('Received category assignment request:', {
+        params: req.params,
+        body: req.body
+      });
+      
       const transactionId = parseInt(req.params.transactionId);
       const { categoryId } = req.body;
+      
+      console.log(`Processing assignment: Transaction ID ${transactionId}, Category ID ${categoryId}`);
 
       if (isNaN(transactionId) || isNaN(categoryId)) {
         res.status(400).json({ 

@@ -154,6 +154,11 @@ const CategoryAssignmentDialog: React.FC<CategoryAssignmentDialogProps> = ({
           <Typography variant="subtitle2" color="textSecondary">
             {transaction.description} - {transaction.creditAmount ? `€${transaction.creditAmount}` : `-€${transaction.debitAmount}`}
           </Typography>
+          {transaction.groupingStatus && transaction.groupingStatus !== 'none' && (
+            <Typography variant="caption" color="warning.main" sx={{ display: 'block', mt: 1 }}>
+              Note: This transaction already has a category assigned. Selecting a new category will replace the existing one.
+            </Typography>
+          )}
         </Box>
       )}
       <DialogContent>

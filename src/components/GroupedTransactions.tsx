@@ -162,6 +162,7 @@ const GroupedTransactions: React.FC<GroupedTransactionsProps> = ({ transactions,
               try {
                 const cats = await CategoryService.getCategoriesForTransaction(transaction.id);
                 if (cats && cats.length > 0) {
+                  // Use only the first category (enforcing single category rule)
                   const catId = cats[0].id !== undefined ? cats[0].id : 0;
                   
                   // Find the full category object to check if it's a parent or child
@@ -699,32 +700,30 @@ const GroupedTransactions: React.FC<GroupedTransactionsProps> = ({ transactions,
                       }
                     });
                     
-                    // Add common category names for better auto-categorization
-                    const commonCategoryMappings: {[key: string]: number} = {
-                      // Expenditure categories
-                      "Grocery": PARENT_CATEGORIES.EXPENDITURES.id,
-                      "Utilities": PARENT_CATEGORIES.EXPENDITURES.id,
-                      "Entertainment": PARENT_CATEGORIES.EXPENDITURES.id,
-                      "School": PARENT_CATEGORIES.EXPENDITURES.id,
-                      "Others": PARENT_CATEGORIES.EXPENDITURES.id,
-                      "Rent": PARENT_CATEGORIES.EXPENDITURES.id,
-                      "Shopping": PARENT_CATEGORIES.EXPENDITURES.id,
-                      "Transport": PARENT_CATEGORIES.EXPENDITURES.id,
-                      "Food": PARENT_CATEGORIES.EXPENDITURES.id,
+                    // Instead of hardcoding mappings, use the category hierarchy from database
+                    const commonCategoryMappings: {[key: string]: number} = {};
+                    
+                    // Dynamically populate mappings from the database categories
+                    Object.values(categoryHierarchy).forEach((catInfo) => {
+                      const lowerName = catInfo.name.toLowerCase();
                       
-                      // Savings categories
-                      "Revolut": PARENT_CATEGORIES.SAVINGS.id,
-                      "Holiday": PARENT_CATEGORIES.SAVINGS.id,
-                      "Recurring Deposits": PARENT_CATEGORIES.SAVINGS.id,
-                      "Fixed Deposits": PARENT_CATEGORIES.SAVINGS.id,
-                      "eToro": PARENT_CATEGORIES.SAVINGS.id,
-                      "Investments": PARENT_CATEGORIES.SAVINGS.id,
-                      
-                      // Earnings categories
-                      "Salary": PARENT_CATEGORIES.EARNINGS.id,
-                      "Income": PARENT_CATEGORIES.EARNINGS.id,
-                      "Bonus": PARENT_CATEGORIES.EARNINGS.id
-                    };
+                      // Map the category based on its parent_id - if it has a parent, it's a subcategory
+                      if (catInfo.parent_id) {
+                        commonCategoryMappings[catInfo.name] = catInfo.parent_id;
+                      } else {
+                        // For root categories, try to determine if it's earnings, expenditure or savings
+                        // based on name patterns to ensure proper categorization
+                        if (lowerName.includes('earning') || lowerName.includes('income') || 
+                            lowerName.includes('salary') || lowerName.includes('revenue')) {
+                          commonCategoryMappings[catInfo.name] = PARENT_CATEGORIES.EARNINGS.id;
+                        } else if (lowerName.includes('saving') || lowerName.includes('investment') || 
+                                  lowerName.includes('deposit')) {
+                          commonCategoryMappings[catInfo.name] = PARENT_CATEGORIES.SAVINGS.id;
+                        } else {
+                          commonCategoryMappings[catInfo.name] = PARENT_CATEGORIES.EXPENDITURES.id;
+                        }
+                      }
+                    });
                     
                     // Add common mappings if they don't already exist
                     Object.entries(commonCategoryMappings).forEach(([name, parentId]) => {

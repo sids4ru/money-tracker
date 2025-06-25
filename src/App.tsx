@@ -73,8 +73,14 @@ function App() {
             </Routes>
           </Box>
           
-          <Box component="footer" sx={{ py: 3, px: 2, mt: 'auto', backgroundColor: (theme) => theme.palette.grey[200] }}>
-            <Container maxWidth="sm">
+          <Box component="footer" sx={{ 
+            py: 3, 
+            px: 2, 
+            mt: 'auto', 
+            backgroundColor: (theme) => theme.palette.grey[200],
+            width: '100%'
+          }}>
+            <Container maxWidth={false}>
               <Typography variant="body2" color="text.secondary" align="center">
                 {'Finance Tracker © '}
                 {new Date().getFullYear()}

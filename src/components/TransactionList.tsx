@@ -101,13 +101,14 @@ const TransactionList: React.FC<TransactionListProps> = ({ transactions, isLoadi
         const batch = transactions.slice(i, i + 10);
         await Promise.all(batch.map(async (transaction) => {
           if (transaction.id) {
-            try {
-              const cats = await CategoryService.getCategoriesForTransaction(transaction.id);
-              if (cats && cats.length > 0) {
-                categoriesMap[transaction.id] = cats.map(c => c.name);
-              }
+              try {
+                const cats = await CategoryService.getCategoriesForTransaction(transaction.id);
+                if (cats && cats.length > 0) {
+                  // Enforce single category per transaction - only take the first one
+                  categoriesMap[transaction.id] = [cats[0].name];
+                }
             } catch (error) {
-              console.error(`Failed to fetch categories for transaction ${transaction.id}:`, error);
+              console.error(`Failed to fetch category for transaction ${transaction.id}:`, error);
             }
           }
         }));
@@ -212,24 +213,46 @@ const TransactionList: React.FC<TransactionListProps> = ({ transactions, isLoadi
   
   const handleAssignCategory = async (transactionId: number, categoryId: number, applyToSimilar: boolean) => {
     try {
-      await CategoryService.assignTransactionToCategory(transactionId, categoryId, applyToSimilar);
-      console.log(`Transaction ${transactionId} assigned to category ${categoryId}`);
+      console.log(`Assigning category ${categoryId} to transaction ${transactionId} (applyToSimilar: ${applyToSimilar})`);
       
-      // Refresh transaction categories cache for this transaction
+      // First update the local UI immediately for better user feedback
       const category = await CategoryService.getCategory(categoryId);
       if (category) {
+        console.log(`Got category details: ${JSON.stringify(category)}`);
         setTransactionCategories(prev => ({
           ...prev,
           [transactionId]: [category.name]
         }));
       }
       
-      // Call the onUpdate callback to refresh the data
+      // Then send the update to the server
+      const result = await CategoryService.assignTransactionToCategory(transactionId, categoryId, applyToSimilar);
+      console.log(`Assignment result: ${JSON.stringify(result)}`);
+      
+      // Perform a full data refresh to ensure everything is updated
       if (onUpdate) {
+        console.log('Triggering full data refresh after manual category update');
         onUpdate();
+      } else {
+        console.log('No onUpdate callback provided, refreshing categories manually');
+        // If no onUpdate callback is provided, force-refresh categories for this transaction
+        const updatedCats = await CategoryService.getCategoriesForTransaction(transactionId);
+        console.log(`Got updated categories: ${JSON.stringify(updatedCats)}`);
+        if (updatedCats && updatedCats.length > 0) {
+          setTransactionCategories(prev => ({
+            ...prev,
+            [transactionId]: [updatedCats[0].name]
+          }));
+        } else {
+          console.log('Warning: No categories returned after assignment');
+        }
       }
     } catch (error) {
       console.error('Error assigning category:', error);
+      // Revert the optimistic UI update on error
+      if (onUpdate) {
+        onUpdate();
+      }
     }
   };
   

@@ -9,44 +9,63 @@ const runMigrations = async (): Promise<void> => {
   console.log('Running database migrations...');
   
   try {
-    // Read and execute the grouping status migration
-    const groupingStatusMigration = fs.readFileSync(
-      path.join(__dirname, 'add_grouping_status.sql'), 
-      'utf8'
-    );
-    
-    // Split by semicolons to get individual statements
-    const statements = groupingStatusMigration.split(';').filter(stmt => stmt.trim());
-    
-    for (const statement of statements) {
-      if (statement.trim()) {
-        try {
-          await new Promise<void>((resolve, reject) => {
-            db.run(statement, (err) => {
-              if (err) {
-                // Ignore errors about columns already existing
-                if (err.message.includes('duplicate column name') || 
-                    err.message.includes('already exists')) {
-                  console.log(`Note: ${err.message}`);
-                  resolve();
-                } else {
-                  reject(err);
-                }
-              } else {
-                resolve();
-              }
-            });
-          });
-        } catch (err) {
-          console.error(`Error executing migration statement: ${statement}`, err);
-        }
-      }
+    // Read and execute migrations
+    const migrations = [
+      { name: 'add_grouping_status', file: 'add_grouping_status.sql' }
+      // We've removed the update_transaction_category_relation migration as we're handling this in application logic
+    ];
+
+    for (const migration of migrations) {
+      console.log(`Running migration: ${migration.name}...`);
+      
+      const migrationContent = fs.readFileSync(
+        path.join(__dirname, migration.file), 
+        'utf8'
+      );
+      
+      // Execute the migration
+      await executeMigration(migrationContent);
+      
+      console.log(`Migration ${migration.name} completed`);
     }
     
     console.log('Database migrations completed successfully');
   } catch (err) {
     console.error('Error running migrations:', err);
     throw err;
+  }
+};
+
+/**
+ * Execute a single migration script
+ */
+const executeMigration = async (migrationContent: string): Promise<void> => {
+  // Split by semicolons to get individual statements
+  const statements = migrationContent.split(';').filter(stmt => stmt.trim());
+  
+  for (const statement of statements) {
+    if (statement.trim()) {
+      try {
+        await new Promise<void>((resolve, reject) => {
+          db.run(statement, (err) => {
+            if (err) {
+              // Ignore errors about columns already existing
+              if (err.message.includes('duplicate column name') || 
+                  err.message.includes('already exists')) {
+                console.log(`Note: ${err.message}`);
+                resolve();
+              } else {
+                reject(err);
+              }
+            } else {
+              resolve();
+            }
+          });
+        });
+      } catch (err) {
+        console.error(`Error executing migration statement: ${statement}`, err);
+      }
+    }
   }
 };
 
