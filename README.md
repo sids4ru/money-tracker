@@ -10,6 +10,9 @@ A React application for tracking finances with a SQLite database backend. This a
 - **Search & Filtering**: Full-text search across all transaction fields
 - **Sorting**: Sort by any column including date, amount, and balance
 - **Pagination**: Browse through transactions with configurable page sizes
+- **Transaction Categorization**: Assign categories to transactions for better organization
+- **Apply to Similar Transactions**: Automatically categorize similar transactions
+- **Financial Reports**: View charts and breakdowns by category
 - **Summary Statistics**: View total debits, credits and overall transaction count
 - **Mobile-Responsive UI**: Adapts to different screen sizes
 
@@ -139,11 +142,29 @@ The project uses Git for version control:
 - `.gitignore` configured to exclude node_modules, database files, and other temporary files
 - Organized commit structure for tracking changes
 
+## Current Status
+
+The application now includes:
+- Transaction categorization system with parent/child category support
+- Visual data presentation with multiple chart types (bar, pie, line)
+- Financial analysis by month, category, and trends
+- Auto-categorization of similar transactions
+
+## Pending Features
+
+1. **Transaction Categorization Improvements**:
+   - ✅ Skip already manually categorized transactions when using "Apply to similar transactions" feature
+   - Remove hard-coded categories in category page and make the system more dynamic
+   - Add feature to persist auto-categorization rules using a similarity table
+   - Create UI for the similarity table in the settings page
+
+2. **Data Analysis Enhancements**:
+   - Add budget tracking with goals by category
+   - Improve visualization options for financial insights
+   - Add custom date range selection for reports
+
 ## Future Enhancements
 
-- **Transaction Categorization**: Automatically categorize transactions based on description
-- **Budget Tracking**: Set budget goals and track spending by category
-- **Data Visualization**: Charts and graphs for spending analysis
 - **Recurring Transaction Detection**: Identify regular payments and subscriptions
 - **Multiple Account Support**: Track transactions across different bank accounts
 - **Export Functionality**: Export transaction data in various formats
