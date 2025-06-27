@@ -1,0 +1,61 @@
+erDiagram
+    transactions {
+        int id PK
+        text account_number
+        text transaction_date
+        text description1
+        text description2
+        text description3
+        text debit_amount
+        text credit_amount
+        text balance
+        text currency
+        text transaction_type
+        text local_currency_amount
+        text local_currency
+        text grouping_status
+        int transaction_category_id FK
+        int category_id
+        text created_at
+    }
+    
+    parent_categories {
+        int id PK
+        text name
+        text description
+        timestamp created_at
+    }
+    
+    categories {
+        int id PK
+        text name
+        int parent_id FK
+        text description
+        timestamp created_at
+    }
+    
+    transaction_categories {
+        int id PK
+        int transaction_id FK
+        int category_id FK
+        text created_at
+    }
+    
+    transaction_similarity_patterns {
+        int id PK
+        text pattern_type
+        text pattern_value
+        int parent_category_id FK
+        int category_id FK
+        real confidence_score
+        timestamp created_at
+        timestamp updated_at
+        int usage_count
+    }
+    
+    transactions ||--o{ transaction_categories : "has"
+    transaction_categories }o--|| categories : "references"
+    transactions ||--o| transaction_categories : "references via transaction_category_id"
+    parent_categories ||--o{ categories : "parent of"
+    categories ||--o{ transaction_similarity_patterns : "referenced by"
+    parent_categories ||--o{ transaction_similarity_patterns : "referenced by"
