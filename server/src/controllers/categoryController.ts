@@ -706,21 +706,21 @@ export const CategoryController = {
   async deleteTransactionSimilarityPattern(req: Request, res: Response): Promise<void> {
     try {
       const patternId = parseInt(req.params.id);
-      
+
       if (isNaN(patternId)) {
-        res.status(400).json({ 
-          success: false, 
-          message: 'Invalid pattern ID' 
+        res.status(400).json({
+          success: false,
+          message: 'Invalid pattern ID'
         });
         return;
       }
 
       const pattern = await TransactionSimilarityPatternModel.getById(patternId);
-      
+
       if (!pattern) {
-        res.status(404).json({ 
-          success: false, 
-          message: 'Transaction similarity pattern not found' 
+        res.status(404).json({
+          success: false,
+          message: 'Transaction similarity pattern not found'
         });
         return;
       }
@@ -729,15 +729,36 @@ export const CategoryController = {
 
       res.status(success ? 200 : 400).json({
         success,
-        message: success 
-          ? 'Transaction similarity pattern deleted successfully' 
+        message: success
+          ? 'Transaction similarity pattern deleted successfully'
           : 'Failed to delete transaction similarity pattern'
       });
     } catch (error) {
       console.error(`Error deleting transaction similarity pattern #${req.params.id}:`, error);
-      res.status(500).json({ 
-        success: false, 
-        message: 'Failed to delete transaction similarity pattern' 
+      res.status(500).json({
+        success: false,
+        message: 'Failed to delete transaction similarity pattern'
+      });
+    }
+  },
+  
+  /**
+   * Get all transaction similarity patterns
+   */
+  async getAllTransactionSimilarityPatterns(req: Request, res: Response): Promise<void> {
+    try {
+      const patterns = await TransactionSimilarityPatternModel.getAll();
+      
+      res.status(200).json({
+        success: true,
+        message: 'Transaction similarity patterns retrieved successfully',
+        data: patterns
+      });
+    } catch (error) {
+      console.error('Error retrieving transaction similarity patterns:', error);
+      res.status(500).json({
+        success: false,
+        message: 'Failed to retrieve transaction similarity patterns'
       });
     }
   },

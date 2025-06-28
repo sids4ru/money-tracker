@@ -18,6 +18,7 @@ router.put('/:id', CategoryController.updateCategory);
 router.delete('/:id', CategoryController.deleteCategory);
 
 // Transaction Similarity Pattern routes
+router.get('/patterns', CategoryController.getAllTransactionSimilarityPatterns);
 router.post('/pattern', CategoryController.createTransactionSimilarityPattern);
 router.get('/pattern/:id', CategoryController.getTransactionSimilarityPattern);
 router.put('/pattern/:id', CategoryController.updateTransactionSimilarityPattern);

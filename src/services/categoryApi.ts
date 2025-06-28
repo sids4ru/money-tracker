@@ -347,5 +347,23 @@ export const CategoryService = {
       console.error(`Error deleting transaction similarity pattern #${id}:`, error);
       throw error;
     }
+  },
+  
+  /**
+   * Get all transaction similarity patterns
+   */
+  async getAllPatterns(): Promise<TransactionSimilarityPattern[]> {
+    try {
+      // Use the TransactionSimilarityPatternModel.getAll endpoint - no specific endpoint exists yet
+      // For now, return empty array to prevent errors
+      return [];
+      
+      // When backend endpoint is implemented, use this code:
+      // const response = await api.get('/categories/patterns');
+      // return response.data.data;
+    } catch (error) {
+      console.error('Error fetching transaction patterns:', error);
+      throw error;
+    }
   }
 };

@@ -132,10 +132,18 @@ export default function SettingsPage() {
       const fetchedCategories = await CategoryService.getAllCategories();
       console.log("Fetched categories:", fetchedCategories);
       setParentCategories(fetchedCategories);
-      
-      // In a real implementation, we would also fetch patterns here
-      // const fetchedPatterns = await CategoryService.getAllPatterns();
-      // setPatterns(fetchedPatterns);
+
+      // Fetch transaction similarity patterns
+      try {
+        const fetchedPatterns = await CategoryService.getAllPatterns();
+        console.log("Fetched patterns:", fetchedPatterns);
+        setPatterns(fetchedPatterns);
+      } catch (error) {
+        console.error('Failed to fetch patterns:', error);
+        console.log('Response status:', (error as any).response?.status);
+        console.log('Response data:', (error as any).response?.data);
+        // Continue with the app even if patterns can't be fetched
+      }
     } catch (error) {
       console.error('Failed to fetch data:', error);
       setError('Failed to load data. Please try again.');

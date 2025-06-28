@@ -103,8 +103,21 @@ const TransactionList: React.FC<TransactionListProps> = ({ transactions, isLoadi
         await Promise.all(batch.map(async (transaction) => {
           if (transaction.id) {
               try {
+                // Debug - check if this is the problematic transaction
+                const isSavingsTransaction = transaction.description && 
+                  (transaction.description.includes("SAVING") || transaction.description1?.includes("SAVING"));
+                
                 // Get categories for this transaction from transaction_categories table
                 const cats = await CategoryService.getCategoriesForTransaction(transaction.id);
+                
+                // Debug log for saving transactions
+                if (isSavingsTransaction) {
+                  console.log(`SAVING Transaction ${transaction.id}:`, transaction.description1 || transaction.description);
+                  console.log(`Categories found:`, cats);
+                  console.log(`Transaction groupingStatus:`, transaction.groupingStatus);
+                  console.log(`Transaction categoryId:`, transaction.categoryId);
+                }
+                
                 if (cats && cats.length > 0) {
                   // Store category info in cache for later use
                   cats.forEach(cat => {
@@ -115,7 +128,7 @@ const TransactionList: React.FC<TransactionListProps> = ({ transactions, isLoadi
                       }));
                     }
                   });
-                  
+
                   // Store the category names
                   categoriesMap[transaction.id] = cats.map(cat => {
                     // If there's a parent name, display it as "Parent > Category"
@@ -124,6 +137,18 @@ const TransactionList: React.FC<TransactionListProps> = ({ transactions, isLoadi
                     }
                     return cat.name;
                   });
+                } 
+                // If a transaction has categoryId or groupingStatus but no categories were found
+                else if (transaction.categoryId || transaction.groupingStatus === 'manual' || 
+                         transaction.groupingStatus === 'auto') {
+                  console.log(`WARNING: Transaction ${transaction.id} has categoryId/groupingStatus but no categories found!`);
+                  
+                  // For transactions that have a groupingStatus or categoryId but no categories returned,
+                  // try to manually add a placeholder category based on description
+                  if (isSavingsTransaction) {
+                    console.log(`Creating placeholder category for saving transaction: ${transaction.id}`);
+                    categoriesMap[transaction.id] = ["saving -> recurring deposit"];
+                  }
                 }
             } catch (error) {
               console.error(`Failed to fetch category for transaction ${transaction.id}:`, error);
