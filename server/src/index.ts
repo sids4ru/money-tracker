@@ -13,6 +13,7 @@ import { runMigrations } from './database/migrations/runMigrations';
 // Import routes
 import transactionRoutes from './routes/transactionRoutes';
 import categoryRoutes from './routes/categoryRoutes';
+import analysisRoutes from './routes/analysisRoutes';
 
 // Load environment variables from .env file
 dotenv.config();
@@ -31,6 +32,7 @@ app.use(bodyParser.urlencoded({ extended: true }));
 // Routes
 app.use('/api/transactions', transactionRoutes);
 app.use('/api/categories', categoryRoutes);
+app.use('/api/analysis', analysisRoutes);
 
 // Error handling middleware
 app.use((err: any, req: express.Request, res: express.Response, next: express.NextFunction) => {

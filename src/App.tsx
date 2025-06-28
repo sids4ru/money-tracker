@@ -5,6 +5,7 @@ import AccountBalanceIcon from '@mui/icons-material/AccountBalance';
 import TransactionsPage from './pages/TransactionsPage';
 import GroupedTransactionsPage from './pages/GroupedTransactionsPage';
 import SettingsPage from './pages/SettingsPage';
+import AnalysisPage from './pages/AnalysisPage';
 
 // Create a theme
 const theme = createTheme({
@@ -42,6 +43,7 @@ const NavigationTabs = () => {
     >
       <Tab label="All Transactions" value="/" component={Link} to="/" />
       <Tab label="Grouped View" value="/grouped" component={Link} to="/grouped" />
+      <Tab label="Analysis" value="/analysis" component={Link} to="/analysis" />
       <Tab label="Settings" value="/settings" component={Link} to="/settings" />
     </Tabs>
   );
@@ -69,6 +71,7 @@ function App() {
             <Routes>
               <Route path="/" element={<TransactionsPage />} />
               <Route path="/grouped" element={<GroupedTransactionsPage />} />
+              <Route path="/analysis" element={<AnalysisPage />} />
               <Route path="/settings" element={<SettingsPage />} />
             </Routes>
           </Box>
