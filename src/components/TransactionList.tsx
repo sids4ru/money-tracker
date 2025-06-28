@@ -20,7 +20,7 @@ import {
 } from '@mui/material';
 import SearchIcon from '@mui/icons-material/Search';
 import CategoryIcon from '@mui/icons-material/Category';
-import { Transaction } from '../types/Transaction';
+import { Transaction, CategoryInfo } from '../types/Transaction';
 import CategoryAssignmentDialog from './CategoryAssignmentDialog';
 import { CategoryService } from '../services/categoryApi';
 
@@ -90,6 +90,7 @@ const TransactionList: React.FC<TransactionListProps> = ({ transactions, isLoadi
   const [categoryDialogOpen, setCategoryDialogOpen] = useState(false);
   const [selectedTransaction, setSelectedTransaction] = useState<Transaction | null>(null);
   const [transactionCategories, setTransactionCategories] = useState<{[key: string]: string[]}>({});
+  const [categoryCache, setCategoryCache] = useState<{[key: string]: CategoryInfo}>({});
 
   // Load transaction categories
   useEffect(() => {
@@ -102,10 +103,27 @@ const TransactionList: React.FC<TransactionListProps> = ({ transactions, isLoadi
         await Promise.all(batch.map(async (transaction) => {
           if (transaction.id) {
               try {
+                // Get categories for this transaction from transaction_categories table
                 const cats = await CategoryService.getCategoriesForTransaction(transaction.id);
                 if (cats && cats.length > 0) {
-                  // Enforce single category per transaction - only take the first one
-                  categoriesMap[transaction.id] = [cats[0].name];
+                  // Store category info in cache for later use
+                  cats.forEach(cat => {
+                    if (cat.id) {
+                      setCategoryCache(prev => ({
+                        ...prev,
+                        [cat.id]: cat
+                      }));
+                    }
+                  });
+                  
+                  // Store the category names
+                  categoriesMap[transaction.id] = cats.map(cat => {
+                    // If there's a parent name, display it as "Parent > Category"
+                    if (cat.parentName) {
+                      return `${cat.parentName} > ${cat.name}`;
+                    }
+                    return cat.name;
+                  });
                 }
             } catch (error) {
               console.error(`Failed to fetch category for transaction ${transaction.id}:`, error);
@@ -219,9 +237,23 @@ const TransactionList: React.FC<TransactionListProps> = ({ transactions, isLoadi
       const category = await CategoryService.getCategory(categoryId);
       if (category) {
         console.log(`Got category details: ${JSON.stringify(category)}`);
+        
+        // Get the parent category name if available
+        let displayName = category.name;
+        if (category.parent_id) {
+          try {
+            const parentCategory = await CategoryService.getParentCategory(category.parent_id);
+            if (parentCategory) {
+              displayName = `${parentCategory.name} > ${category.name}`;
+            }
+          } catch (err) {
+            console.error('Error getting parent category:', err);
+          }
+        }
+        
         setTransactionCategories(prev => ({
           ...prev,
-          [transactionId]: [category.name]
+          [transactionId]: [displayName]
         }));
       }
       
@@ -239,9 +271,25 @@ const TransactionList: React.FC<TransactionListProps> = ({ transactions, isLoadi
         const updatedCats = await CategoryService.getCategoriesForTransaction(transactionId);
         console.log(`Got updated categories: ${JSON.stringify(updatedCats)}`);
         if (updatedCats && updatedCats.length > 0) {
+          // Update cache with new categories
+          updatedCats.forEach(cat => {
+            setCategoryCache(prev => ({
+              ...prev,
+              [cat.id]: cat
+            }));
+          });
+          
+          const catNames = updatedCats.map(cat => {
+            // If there's a parent name, display it as "Parent > Category"
+            if (cat.parentName) {
+              return `${cat.parentName} > ${cat.name}`;
+            }
+            return cat.name;
+          });
+          
           setTransactionCategories(prev => ({
             ...prev,
-            [transactionId]: [updatedCats[0].name]
+            [transactionId]: catNames
           }));
         } else {
           console.log('Warning: No categories returned after assignment');

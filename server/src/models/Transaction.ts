@@ -17,6 +17,7 @@ export interface Transaction {
   created_at?: string;
   grouping_status?: 'manual' | 'auto' | 'none';
   category_id?: number;
+  transaction_category_id?: number; // Reference to the transaction_categories table
 }
 
 export class TransactionModel {
@@ -24,14 +25,25 @@ export class TransactionModel {
    * Get all transactions from the database
    */
   static async getAll(): Promise<Transaction[]> {
-    return query<Transaction>('SELECT * FROM transactions ORDER BY transaction_date DESC');
+    return query<Transaction>(
+      `SELECT t.*, tc.id as transaction_category_id, tc.category_id 
+       FROM transactions t
+       LEFT JOIN transaction_categories tc ON t.id = tc.transaction_id
+       ORDER BY t.transaction_date DESC`
+    );
   }
 
   /**
    * Get a transaction by its ID
    */
   static async getById(id: number): Promise<Transaction | undefined> {
-    return get<Transaction>('SELECT * FROM transactions WHERE id = ?', [id]);
+    return get<Transaction>(
+      `SELECT t.*, tc.id as transaction_category_id, tc.category_id 
+       FROM transactions t
+       LEFT JOIN transaction_categories tc ON t.id = tc.transaction_id
+       WHERE t.id = ?`, 
+      [id]
+    );
   }
 
   /**
@@ -189,23 +201,23 @@ export class TransactionModel {
     const params: any[] = [];
 
     if (searchOptions.startDate) {
-      whereClauses.push('transaction_date >= ?');
+      whereClauses.push('t.transaction_date >= ?');
       params.push(searchOptions.startDate);
     }
 
     if (searchOptions.endDate) {
-      whereClauses.push('transaction_date <= ?');
+      whereClauses.push('t.transaction_date <= ?');
       params.push(searchOptions.endDate);
     }
 
     if (searchOptions.transactionType) {
-      whereClauses.push('transaction_type = ?');
+      whereClauses.push('t.transaction_type = ?');
       params.push(searchOptions.transactionType);
     }
 
     if (searchOptions.searchText) {
       whereClauses.push(
-        '(description1 LIKE ? OR description2 LIKE ? OR description3 LIKE ?)'
+        '(t.description1 LIKE ? OR t.description2 LIKE ? OR t.description3 LIKE ?)'
       );
       const searchPattern = `%${searchOptions.searchText}%`;
       params.push(searchPattern, searchPattern, searchPattern);
@@ -213,24 +225,28 @@ export class TransactionModel {
 
     if (typeof searchOptions.minAmount === 'number') {
       whereClauses.push(
-        '((debit_amount IS NOT NULL AND CAST(REPLACE(debit_amount, ",", "") AS REAL) >= ?) OR (credit_amount IS NOT NULL AND CAST(REPLACE(credit_amount, ",", "") AS REAL) >= ?))'
+        '((t.debit_amount IS NOT NULL AND CAST(REPLACE(t.debit_amount, ",", "") AS REAL) >= ?) OR (t.credit_amount IS NOT NULL AND CAST(REPLACE(t.credit_amount, ",", "") AS REAL) >= ?))'
       );
       params.push(searchOptions.minAmount, searchOptions.minAmount);
     }
 
     if (typeof searchOptions.maxAmount === 'number') {
       whereClauses.push(
-        '((debit_amount IS NOT NULL AND CAST(REPLACE(debit_amount, ",", "") AS REAL) <= ?) OR (credit_amount IS NOT NULL AND CAST(REPLACE(credit_amount, ",", "") AS REAL) <= ?))'
+        '((t.debit_amount IS NOT NULL AND CAST(REPLACE(t.debit_amount, ",", "") AS REAL) <= ?) OR (t.credit_amount IS NOT NULL AND CAST(REPLACE(t.credit_amount, ",", "") AS REAL) <= ?))'
       );
       params.push(searchOptions.maxAmount, searchOptions.maxAmount);
     }
 
     // Create the SQL query with or without WHERE clause
-    let sql = 'SELECT * FROM transactions';
+    let sql = `
+      SELECT t.*, tc.id as transaction_category_id, tc.category_id 
+      FROM transactions t
+      LEFT JOIN transaction_categories tc ON t.id = tc.transaction_id`;
+      
     if (whereClauses.length > 0) {
       sql += ` WHERE ${whereClauses.join(' AND ')}`;
     }
-    sql += ' ORDER BY transaction_date DESC';
+    sql += ' ORDER BY t.transaction_date DESC';
 
     return query<Transaction>(sql, params);
   }

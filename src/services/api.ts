@@ -48,7 +48,8 @@ export const TransactionService = {
         localCurrency: item.local_currency || '',
         description: item.description1, // Add computed field
         groupingStatus: item.grouping_status || 'none', // Map grouping status
-        categoryId: item.category_id
+        categoryId: item.category_id,
+        transactionCategoryId: item.transaction_category_id // Add field from ER diagram
       }));
       
       return transactions;
@@ -83,7 +84,8 @@ export const TransactionService = {
         localCurrency: item.local_currency || '',
         description: item.description1, // Add computed field
         groupingStatus: item.grouping_status || 'none', // Map grouping status
-        categoryId: item.category_id
+        categoryId: item.category_id,
+        transactionCategoryId: item.transaction_category_id // Add field from ER diagram
       };
       
       return transaction;
@@ -164,7 +166,8 @@ export const TransactionService = {
         localCurrency: item.local_currency || '',
         description: item.description1, // Add computed field
         groupingStatus: item.grouping_status || 'none', // Map grouping status
-        categoryId: item.category_id
+        categoryId: item.category_id,
+        transactionCategoryId: item.transaction_category_id // Add field from ER diagram
       }));
       
       return transactions;

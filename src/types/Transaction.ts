@@ -15,4 +15,13 @@ export interface Transaction {
   description?: string; // Computed field for easier handling
   groupingStatus?: 'manual' | 'auto' | 'none'; // Status of transaction grouping
   categoryId?: number; // ID of the assigned category
+  transactionCategoryId?: number; // ID of the transaction_categories entry
+}
+
+export interface CategoryInfo {
+  id: number;
+  name: string;
+  description?: string;
+  parentId?: number;
+  parentName?: string;
 }

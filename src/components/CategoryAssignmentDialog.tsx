@@ -20,7 +20,7 @@ import {
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import ExpandLessIcon from '@mui/icons-material/ExpandLess';
 import { CategoryService, Category, ParentCategory } from '../services/categoryApi';
-import { Transaction } from '../types/Transaction';
+import { Transaction, CategoryInfo } from '../types/Transaction';
 
 interface CategoryAssignmentDialogProps {
   open: boolean;

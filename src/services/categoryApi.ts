@@ -1,4 +1,5 @@
 import api from './api';
+import { CategoryInfo } from '../types/Transaction';
 
 export interface ParentCategory {
   id?: number;
@@ -12,9 +13,11 @@ export interface Category {
   id?: number;
   name: string;
   parent_id?: number | null; // References parent_categories
+  parentId?: number; // Alternate property name for frontend use
   description?: string;
   created_at?: string;
   parent_category?: ParentCategory; // Optional joined parent category
+  parentName?: string; // Name of the parent category (for convenience)
 }
 
 export interface TransactionSimilarityPattern {
@@ -79,10 +82,27 @@ export const CategoryService = {
   /**
    * Get a category by ID
    */
-  async getCategory(id: number): Promise<Category> {
+  async getCategory(id: number): Promise<Category & { parentId?: number, parentName?: string }> {
     try {
       const response = await api.get(`/categories/${id}`);
-      return response.data.data;
+      const category = response.data.data;
+      
+      // Add parentId as an alias for parent_id for frontend consistency
+      if (category.parent_id) {
+        category.parentId = category.parent_id;
+        
+        // Fetch parent category to get its name
+        try {
+          const parentCategory = await this.getParentCategory(category.parent_id);
+          if (parentCategory) {
+            category.parentName = parentCategory.name;
+          }
+        } catch (err) {
+          console.error(`Error fetching parent for category #${id}:`, err);
+        }
+      }
+      
+      return category;
     } catch (error) {
       console.error(`Error fetching category #${id}:`, error);
       throw error;
@@ -190,10 +210,37 @@ export const CategoryService = {
   /**
    * Get categories for a transaction
    */
-  async getCategoriesForTransaction(transactionId: number): Promise<Category[]> {
+  async getCategoriesForTransaction(transactionId: number): Promise<CategoryInfo[]> {
     try {
       const response = await api.get(`/categories/transaction/${transactionId}`);
-      return response.data.data;
+      
+      // Transform the data from the API to include parent category information
+      const categories = response.data.data;
+      const transformedCategories: CategoryInfo[] = await Promise.all(
+        categories.map(async (category: Category) => {
+          let parentName = undefined;
+          
+          // If the category has a parent_id, fetch the parent category to get its name
+          if (category.parent_id) {
+            try {
+              const parentCategory = await this.getParentCategory(category.parent_id);
+              parentName = parentCategory.name;
+            } catch (err) {
+              console.error('Error fetching parent category:', err);
+            }
+          }
+          
+          return {
+            id: category.id!,
+            name: category.name,
+            description: category.description,
+            parentId: category.parent_id,
+            parentName: parentName
+          };
+        })
+      );
+      
+      return transformedCategories;
     } catch (error) {
       console.error(`Error fetching categories for transaction #${transactionId}:`, error);
       throw error;
