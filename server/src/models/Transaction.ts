@@ -34,7 +34,7 @@ export class TransactionModel {
   }
 
   /**
-   * Get a transaction by its ID
+   * Get a transaction by ID
    */
   static async getById(id: number): Promise<Transaction | undefined> {
     return get<Transaction>(
@@ -154,8 +154,10 @@ export class TransactionModel {
 
     // Add each field that exists in the transaction object
     Object.entries(transaction).forEach(([key, value]) => {
-      // Skip id and created_at fields
-      if (key !== 'id' && key !== 'created_at') {
+      // Skip id, created_at, and transaction_category_id fields
+      // transaction_category_id should not be directly set in transactions table,
+      // as it's handled by the transaction_categories table
+      if (key !== 'id' && key !== 'created_at' && key !== 'transaction_category_id') {
         fields.push(`${key} = ?`);
         values.push(value);
       }

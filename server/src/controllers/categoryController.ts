@@ -790,8 +790,11 @@ export const CategoryController = {
       // Assign category to transaction
       const assignmentId = await TransactionCategoryModel.assignCategory(transactionId, categoryId);
       
-      // Update the transaction's grouping status to "manual"
-      await TransactionModel.update(transactionId, { grouping_status: 'manual' });
+      // Update the transaction's grouping status to "manual" and set the transaction_category_id reference
+      await TransactionModel.update(transactionId, { 
+        grouping_status: 'manual',
+        transaction_category_id: assignmentId
+      });
 
       // Handle similar transactions if requested
       let updatedSimilar = 0;
@@ -835,10 +838,14 @@ export const CategoryController = {
           await TransactionCategoryModel.removeAllCategories(similarTransaction.id!);
           
           // Then assign the new category
-          await TransactionCategoryModel.assignCategory(similarTransaction.id!, categoryId);
+          const similarAssignmentId = await TransactionCategoryModel.assignCategory(similarTransaction.id!, categoryId);
           
-          // Mark these as auto-grouped
-          await TransactionModel.update(similarTransaction.id!, { grouping_status: 'auto' });
+          // Mark these as auto-grouped and update the transaction_category_id reference
+          await TransactionModel.update(similarTransaction.id!, { 
+            grouping_status: 'auto',
+            transaction_category_id: similarAssignmentId
+          });
+          
           updatedSimilar++;
         } else {
           console.log(`Skipping similar transaction ID ${similarTransaction.id} with earlier date ${similarTransaction.transaction_date}`);
@@ -922,7 +929,26 @@ export const CategoryController = {
         return;
       }
 
+      // Get transaction details before removal
+      const transaction = await TransactionModel.getById(transactionId);
+      if (!transaction) {
+        res.status(404).json({ 
+          success: false, 
+          message: 'Transaction not found' 
+        });
+        return;
+      }
+      
       const success = await TransactionCategoryModel.removeCategory(transactionId, categoryId);
+      
+      if (success) {
+        // After removing the category, update the transaction to clear the transaction_category_id 
+        // and reset grouping_status
+        await TransactionModel.update(transactionId, { 
+          transaction_category_id: undefined, // Using undefined instead of null to match the type
+          grouping_status: 'none' 
+        });
+      }
 
       res.status(success ? 200 : 400).json({
         success,

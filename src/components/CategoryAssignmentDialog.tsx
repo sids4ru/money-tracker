@@ -82,6 +82,8 @@ const CategoryAssignmentDialog: React.FC<CategoryAssignmentDialogProps> = ({
     setAssigning(true);
     
     try {
+      // The onAssign function will handle setting the transaction_category_id
+      // in the transactions table by creating an entry in the transaction_categories table
       await onAssign(transaction.id, categoryId, applyToSimilar);
       onClose();
     } catch (error) {
@@ -91,6 +93,8 @@ const CategoryAssignmentDialog: React.FC<CategoryAssignmentDialogProps> = ({
     }
   };
   
+  // Render parent categories according to the updated ER diagram structure
+  // where parent_categories is a separate table from categories
   const renderParentCategories = () => {
     return parentCategories.map(parentCategory => {
       if (!parentCategory.id) return null;
@@ -104,8 +108,10 @@ const CategoryAssignmentDialog: React.FC<CategoryAssignmentDialogProps> = ({
             sx={{ pl: 0, pr: 2 }}
           >
             <ListItemButton 
-              onClick={() => handleAssign(parentCategory.id!)}
-              disabled={assigning}
+              onClick={(e) => {
+                e.stopPropagation();
+                handleToggleExpand(parentCategory.id!);
+              }}
               dense
             >
               <ListItemText 
@@ -182,11 +188,11 @@ const CategoryAssignmentDialog: React.FC<CategoryAssignmentDialogProps> = ({
           <Typography variant="subtitle2" color="textSecondary">
             {transaction.description} - {transaction.creditAmount ? `€${transaction.creditAmount}` : `-€${transaction.debitAmount}`}
           </Typography>
-          {transaction.groupingStatus && transaction.groupingStatus !== 'none' && (
+          {transaction.groupingStatus === 'manual' || transaction.groupingStatus === 'auto' ? (
             <Typography variant="caption" color="warning.main" sx={{ display: 'block', mt: 1 }}>
               Note: This transaction already has a category assigned. Selecting a new category will replace the existing one.
             </Typography>
-          )}
+          ) : null}
         </Box>
       )}
       <DialogContent>
