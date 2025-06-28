@@ -116,8 +116,18 @@ export const CategoryService = {
     try {
       const response = await api.post('/categories/parent', parentCategory);
       return response.data.data;
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error creating parent category:', error);
+      
+      // Enhanced conflict error handling
+      if (error.response && error.response.status === 409) {
+        console.error(`A parent category with the name "${parentCategory.name}" already exists.`);
+        error.conflictDetails = {
+          message: `A parent category with the name "${parentCategory.name}" already exists.`,
+          fieldName: 'name',
+          attemptedValue: parentCategory.name
+        };
+      }
       throw error;
     }
   },
@@ -129,8 +139,20 @@ export const CategoryService = {
     try {
       const response = await api.post('/categories', category);
       return response.data.data;
-    } catch (error) {
+    } catch (error: any) {
+      // Enhance error logging with more details
       console.error('Error creating category:', error);
+      
+      // If it's a conflict error, add more context to the error
+      if (error.response && error.response.status === 409) {
+        console.error(`A category with the name "${category.name}" already exists.`);
+        // You could enhance the error object with additional information
+        error.conflictDetails = {
+          message: `A category with the name "${category.name}" already exists.`,
+          fieldName: 'name',
+          attemptedValue: category.name
+        };
+      }
       throw error;
     }
   },
@@ -142,8 +164,18 @@ export const CategoryService = {
     try {
       const response = await api.put(`/categories/parent/${id}`, parentCategory);
       return response.data.data;
-    } catch (error) {
+    } catch (error: any) {
       console.error(`Error updating parent category #${id}:`, error);
+      
+      // Enhanced conflict error handling
+      if (error.response && error.response.status === 409) {
+        console.error(`A parent category with the name "${parentCategory.name}" already exists.`);
+        error.conflictDetails = {
+          message: `A parent category with the name "${parentCategory.name}" already exists.`,
+          fieldName: 'name',
+          attemptedValue: parentCategory.name
+        };
+      }
       throw error;
     }
   },

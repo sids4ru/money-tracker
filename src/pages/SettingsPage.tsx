@@ -203,7 +203,14 @@ export default function SettingsPage() {
       // Clear success message after 3 seconds
       setTimeout(() => setSuccess(null), 3000);
     } catch (err: any) {
-      setError(err.response?.data?.message || 'An error occurred. Please try again.');
+      console.error('Error in handleSubmitParentCategory:', err);
+      
+      // Handle 409 conflict error specially for better user feedback
+      if (err.response?.status === 409) {
+        setError(`A parent category with the name "${parentCategoryFormData.name}" already exists.`);
+      } else {
+        setError(err.response?.data?.message || 'An error occurred. Please try again.');
+      }
     }
   };
 
@@ -267,6 +274,8 @@ export default function SettingsPage() {
 
   const handleSubmitCategory = async () => {
     try {
+      console.log('Creating/updating category with data:', categoryFormData);
+      
       if (!categoryFormData.name.trim()) {
         setError('Category name is required.');
         return;
@@ -274,12 +283,63 @@ export default function SettingsPage() {
 
       if (editingCategory) {
         // Update existing category
+        console.log('Updating existing category:', editingCategory.id);
         await CategoryService.updateCategory(editingCategory.id!, categoryFormData);
         setSuccess(`Category "${categoryFormData.name}" updated successfully.`);
       } else {
-        // Create new category
-        await CategoryService.createCategory(categoryFormData);
-        setSuccess(`Category "${categoryFormData.name}" created successfully.`);
+        // First check if a category with this name already exists
+        try {
+          // Get all categories first
+          const allCategories = await CategoryService.getAllCategories();
+          const flatCategories: Category[] = allCategories.flatMap(pc => pc.children || []);
+          
+          // Check if any category has the same name
+          const existingCategory = flatCategories.find(
+            c => c.name.toLowerCase() === categoryFormData.name.toLowerCase()
+          );
+          
+          if (existingCategory) {
+            // Ask if user wants to update the existing category instead
+            const confirmUpdate = window.confirm(
+              `A category named "${categoryFormData.name}" already exists. Would you like to update it instead?`
+            );
+            
+            if (confirmUpdate) {
+              // Update the existing category
+              await CategoryService.updateCategory(existingCategory.id!, {
+                ...categoryFormData,
+                // Keep the original ID
+                id: existingCategory.id
+              });
+              setSuccess(`Category "${categoryFormData.name}" updated successfully.`);
+              setCategoryDialogOpen(false);
+              fetchData();
+              
+              // Clear success message after 3 seconds
+              setTimeout(() => setSuccess(null), 3000);
+              return;
+            } else {
+              // User chose not to update, keep dialog open for name change
+              setError(`Please choose a different name for your new category.`);
+              return;
+            }
+          }
+          
+          // If we got here, no existing category with that name was found
+          // Create new category
+          console.log('Creating new category');
+          const result = await CategoryService.createCategory(categoryFormData);
+          console.log('Create category result:', result);
+          setSuccess(`Category "${categoryFormData.name}" created successfully.`);
+        } catch (checkError) {
+          console.error('Error checking for existing category:', checkError);
+          
+          // Fallback to standard creation with error handling
+          console.log('Falling back to standard category creation');
+          const result = await CategoryService.createCategory(categoryFormData);
+          console.log('Create category result:', result);
+          setSuccess(`Category "${categoryFormData.name}" created successfully.`);
+        }
       }
 
       // Close dialog and refresh categories
@@ -289,7 +349,39 @@ export default function SettingsPage() {
       // Clear success message after 3 seconds
       setTimeout(() => setSuccess(null), 3000);
     } catch (err: any) {
-      setError(err.response?.data?.message || 'An error occurred. Please try again.');
+      console.error('Error in handleSubmitCategory:', err);
+      
+      // Handle 409 conflict error specially for better user feedback
+      if (err.response?.status === 409 && err.response?.data?.data) {
+        // Get the existing category details from the error response
+        const existingCategory = err.response.data.data;
+        
+        // Ask if user wants to update the existing category instead
+        const confirmUpdate = window.confirm(
+          `A category named "${categoryFormData.name}" already exists. Would you like to update it instead?`
+        );
+        
+        if (confirmUpdate) {
+          try {
+            // Update the existing category
+            await CategoryService.updateCategory(existingCategory.id, categoryFormData);
+            setSuccess(`Category "${categoryFormData.name}" updated successfully.`);
+            setCategoryDialogOpen(false);
+            fetchData();
+            
+            // Clear success message after 3 seconds
+            setTimeout(() => setSuccess(null), 3000);
+          } catch (updateError: any) {
+            console.error('Error updating existing category:', updateError);
+            setError(updateError.response?.data?.message || 'Failed to update existing category.');
+          }
+        } else {
+          // User chose not to update, keep dialog open for name change
+          setError(`Please choose a different name for your new category.`);
+        }
+      } else {
+        setError(err.response?.data?.message || 'An error occurred. Please try again.');
+      }
     }
   };
 
@@ -636,7 +728,7 @@ export default function SettingsPage() {
       </Dialog>
       
       {/* Category Dialog */}
-      <Dialog open={categoryDialogOpen} onClose={handleCloseCategoryDialog}>
+      <Dialog open={categoryDialogOpen} onClose={handleCloseCategoryDialog} maxWidth="sm" fullWidth>
         <DialogTitle>
           {editingCategory ? `Edit Category: ${editingCategory.name}` : 'Add New Category'}
         </DialogTitle>
@@ -687,7 +779,11 @@ export default function SettingsPage() {
         </DialogContent>
         <DialogActions>
           <Button onClick={handleCloseCategoryDialog}>Cancel</Button>
-          <Button onClick={handleSubmitCategory} variant="contained">
+          <Button 
+            onClick={handleSubmitCategory} 
+            variant="contained"
+            data-testid="category-submit-button"
+          >
             {editingCategory ? 'Update' : 'Create'}
           </Button>
         </DialogActions>
