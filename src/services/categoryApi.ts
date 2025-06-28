@@ -1,12 +1,32 @@
 import api from './api';
 
+export interface ParentCategory {
+  id?: number;
+  name: string;
+  description?: string;
+  created_at?: string;
+  children?: Category[]; // Used for hierarchical display
+}
+
 export interface Category {
   id?: number;
   name: string;
-  parent_id?: number | null;
+  parent_id?: number | null; // References parent_categories
   description?: string;
   created_at?: string;
-  children?: Category[];
+  parent_category?: ParentCategory; // Optional joined parent category
+}
+
+export interface TransactionSimilarityPattern {
+  id?: number;
+  pattern_type: string; // 'exact', 'regex', 'contains', etc.
+  pattern_value: string;
+  parent_category_id?: number | null;
+  category_id?: number | null;
+  confidence_score?: number;
+  created_at?: string;
+  updated_at?: string;
+  usage_count?: number;
 }
 
 export interface CategoryAssignment {
@@ -18,14 +38,40 @@ export interface CategoryAssignment {
 // API service for categories
 export const CategoryService = {
   /**
-   * Get all categories
+   * Get all parent categories with their child categories
    */
-  async getAllCategories(): Promise<Category[]> {
+  async getAllCategories(): Promise<ParentCategory[]> {
     try {
       const response = await api.get('/categories');
       return response.data.data;
     } catch (error) {
       console.error('Error fetching categories:', error);
+      throw error;
+    }
+  },
+  
+  /**
+   * Get all parent categories without their children
+   */
+  async getAllParentCategories(): Promise<ParentCategory[]> {
+    try {
+      const response = await api.get('/categories/parent');
+      return response.data.data;
+    } catch (error) {
+      console.error('Error fetching parent categories:', error);
+      throw error;
+    }
+  },
+
+  /**
+   * Get a parent category by ID
+   */
+  async getParentCategory(id: number): Promise<ParentCategory> {
+    try {
+      const response = await api.get(`/categories/parent/${id}`);
+      return response.data.data;
+    } catch (error) {
+      console.error(`Error fetching parent category #${id}:`, error);
       throw error;
     }
   },
@@ -44,6 +90,19 @@ export const CategoryService = {
   },
 
   /**
+   * Create a new parent category
+   */
+  async createParentCategory(parentCategory: Omit<ParentCategory, 'id' | 'created_at' | 'children'>): Promise<ParentCategory> {
+    try {
+      const response = await api.post('/categories/parent', parentCategory);
+      return response.data.data;
+    } catch (error) {
+      console.error('Error creating parent category:', error);
+      throw error;
+    }
+  },
+
+  /**
    * Create a new category
    */
   async createCategory(category: Omit<Category, 'id' | 'created_at'>): Promise<Category> {
@@ -57,6 +116,19 @@ export const CategoryService = {
   },
 
   /**
+   * Update a parent category
+   */
+  async updateParentCategory(id: number, parentCategory: Partial<ParentCategory>): Promise<ParentCategory> {
+    try {
+      const response = await api.put(`/categories/parent/${id}`, parentCategory);
+      return response.data.data;
+    } catch (error) {
+      console.error(`Error updating parent category #${id}:`, error);
+      throw error;
+    }
+  },
+
+  /**
    * Update a category
    */
   async updateCategory(id: number, category: Partial<Category>): Promise<Category> {
@@ -65,6 +137,19 @@ export const CategoryService = {
       return response.data.data;
     } catch (error) {
       console.error(`Error updating category #${id}:`, error);
+      throw error;
+    }
+  },
+
+  /**
+   * Delete a parent category
+   */
+  async deleteParentCategory(id: number): Promise<boolean> {
+    try {
+      await api.delete(`/categories/parent/${id}`);
+      return true;
+    } catch (error) {
+      console.error(`Error deleting parent category #${id}:`, error);
       throw error;
     }
   },
@@ -124,6 +209,63 @@ export const CategoryService = {
       return true;
     } catch (error) {
       console.error(`Error removing category #${categoryId} from transaction #${transactionId}:`, error);
+      throw error;
+    }
+  },
+
+  /**
+   * Create a transaction similarity pattern
+   */
+  async createTransactionSimilarityPattern(
+    pattern: Omit<TransactionSimilarityPattern, 'id' | 'created_at' | 'updated_at' | 'usage_count'>
+  ): Promise<TransactionSimilarityPattern> {
+    try {
+      const response = await api.post('/categories/pattern', pattern);
+      return response.data.data;
+    } catch (error) {
+      console.error('Error creating transaction similarity pattern:', error);
+      throw error;
+    }
+  },
+
+  /**
+   * Get a transaction similarity pattern by ID
+   */
+  async getTransactionSimilarityPattern(id: number): Promise<TransactionSimilarityPattern> {
+    try {
+      const response = await api.get(`/categories/pattern/${id}`);
+      return response.data.data;
+    } catch (error) {
+      console.error(`Error fetching transaction similarity pattern #${id}:`, error);
+      throw error;
+    }
+  },
+
+  /**
+   * Update a transaction similarity pattern
+   */
+  async updateTransactionSimilarityPattern(
+    id: number,
+    pattern: Partial<TransactionSimilarityPattern>
+  ): Promise<TransactionSimilarityPattern> {
+    try {
+      const response = await api.put(`/categories/pattern/${id}`, pattern);
+      return response.data.data;
+    } catch (error) {
+      console.error(`Error updating transaction similarity pattern #${id}:`, error);
+      throw error;
+    }
+  },
+
+  /**
+   * Delete a transaction similarity pattern
+   */
+  async deleteTransactionSimilarityPattern(id: number): Promise<boolean> {
+    try {
+      await api.delete(`/categories/pattern/${id}`);
+      return true;
+    } catch (error) {
+      console.error(`Error deleting transaction similarity pattern #${id}:`, error);
       throw error;
     }
   }

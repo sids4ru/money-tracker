@@ -11,17 +11,23 @@ const runMigrations = async (): Promise<void> => {
   try {
     // Read and execute migrations
     const migrations = [
-      { name: 'add_grouping_status', file: 'add_grouping_status.sql' }
-      // We've removed the update_transaction_category_relation migration as we're handling this in application logic
+      { name: 'align_with_er_diagram', file: 'align_with_er_diagram.sql' },
+      { name: 'add_transaction_unique_constraint', file: 'add_transaction_unique_constraint.sql' },
+      { name: 'add_common_categories', file: 'add_common_categories.sql' }
     ];
 
     for (const migration of migrations) {
       console.log(`Running migration: ${migration.name}...`);
       
-      const migrationContent = fs.readFileSync(
-        path.join(__dirname, migration.file), 
-        'utf8'
-      );
+      // Fix path to find SQL files in the src directory 
+      let filePath = path.join(__dirname, migration.file);
+      
+      // If running from dist/, look for files in src instead
+      if (filePath.includes('/dist/')) {
+        filePath = filePath.replace('/dist/', '/src/');
+      }
+      
+      const migrationContent = fs.readFileSync(filePath, 'utf8');
       
       // Execute the migration
       await executeMigration(migrationContent);

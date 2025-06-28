@@ -1,59 +1,59 @@
 erDiagram
     transactions {
         int id PK
-        text account_number
-        text transaction_date
+        text account_number "NOT NULL"
+        text transaction_date "NOT NULL"
         text description1
         text description2
         text description3
         text debit_amount
         text credit_amount
-        text balance
-        text currency
-        text transaction_type
+        text balance "NOT NULL"
+        text currency "NOT NULL"
+        text transaction_type "NOT NULL"
         text local_currency_amount
         text local_currency
-        text grouping_status
+        text grouping_status "manual/auto/none/null"
         int transaction_category_id FK
         int category_id
-        text created_at
+        text created_at "NOT NULL DEFAULT now"
     }
     
     parent_categories {
         int id PK
-        text name
+        text name "UNIQUE NOT NULL"
         text description
-        timestamp created_at
+        timestamp created_at "DEFAULT TIMESTAMP"
     }
     
     categories {
         int id PK
-        text name
+        text name "NOT NULL"
         int parent_id FK
         text description
-        timestamp created_at
+        timestamp created_at "DEFAULT TIMESTAMP"
     }
     
     transaction_categories {
         int id PK
-        int transaction_id FK
-        int category_id FK
-        text created_at
+        int transaction_id FK "NOT NULL UNIQUE"
+        int category_id FK "NOT NULL"
+        text created_at "NOT NULL DEFAULT now"
     }
     
     transaction_similarity_patterns {
         int id PK
-        text pattern_type
-        text pattern_value
+        text pattern_type "NOT NULL"
+        text pattern_value "NOT NULL"
         int parent_category_id FK
-        int category_id FK
-        real confidence_score
-        timestamp created_at
-        timestamp updated_at
-        int usage_count
+        int category_id FK "NOT NULL"
+        real confidence_score "NOT NULL DEFAULT 1.0"
+        timestamp created_at "DEFAULT TIMESTAMP"
+        timestamp updated_at "DEFAULT TIMESTAMP"
+        int usage_count "DEFAULT 0"
     }
     
-    transactions ||--o{ transaction_categories : "has"
+    transactions ||--o| transaction_categories : "has one category assignment"
     transaction_categories }o--|| categories : "references"
     transactions ||--o| transaction_categories : "references via transaction_category_id"
     parent_categories ||--o{ categories : "parent of"

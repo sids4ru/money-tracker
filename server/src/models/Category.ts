@@ -1,11 +1,13 @@
 import { query, get, run } from '../database/db';
+import { ParentCategory } from './ParentCategory';
 
 export interface Category {
   id?: number;
   name: string;
-  parent_id?: number | null;
+  parent_id?: number | null; // References parent_categories table
   description?: string;
   created_at?: string;
+  parent_category?: ParentCategory; // Optional joined parent category
 }
 
 export interface TransactionCategory {
@@ -27,7 +29,21 @@ export class CategoryModel {
    * Get a category by its ID
    */
   static async getById(id: number): Promise<Category | undefined> {
-    return get<Category>('SELECT * FROM categories WHERE id = ?', [id]);
+    const category = await get<Category>('SELECT * FROM categories WHERE id = ?', [id]);
+    
+    if (category && category.parent_id) {
+      // Join with parent category
+      const parentCategory = await get<ParentCategory>(
+        'SELECT * FROM parent_categories WHERE id = ?', 
+        [category.parent_id]
+      );
+      
+      if (parentCategory) {
+        category.parent_category = parentCategory;
+      }
+    }
+    
+    return category;
   }
 
   /**
@@ -85,9 +101,9 @@ export class CategoryModel {
   }
 
   /**
-   * Get all sub-categories of a parent category
+   * Get all categories by parent category ID
    */
-  static async getSubcategories(parentId: number): Promise<Category[]> {
+  static async getCategoriesByParentId(parentId: number): Promise<Category[]> {
     return query<Category>('SELECT * FROM categories WHERE parent_id = ? ORDER BY name', [parentId]);
   }
 
@@ -96,6 +112,29 @@ export class CategoryModel {
    */
   static async findByName(name: string): Promise<Category | undefined> {
     return get<Category>('SELECT * FROM categories WHERE name = ?', [name]);
+  }
+  
+  /**
+   * Get all categories with their parent categories
+   */
+  static async getAllWithParents(): Promise<Category[]> {
+    const categories = await query<Category>('SELECT * FROM categories ORDER BY name');
+    
+    // For each category, get its parent category if available
+    for (const category of categories) {
+      if (category.parent_id) {
+        const parentCategory = await get<ParentCategory>(
+          'SELECT * FROM parent_categories WHERE id = ?',
+          [category.parent_id]
+        );
+        
+        if (parentCategory) {
+          category.parent_category = parentCategory;
+        }
+      }
+    }
+    
+    return categories;
   }
 }
 

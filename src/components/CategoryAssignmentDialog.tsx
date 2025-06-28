@@ -19,7 +19,7 @@ import {
 } from '@mui/material';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import ExpandLessIcon from '@mui/icons-material/ExpandLess';
-import { CategoryService, Category } from '../services/categoryApi';
+import { CategoryService, Category, ParentCategory } from '../services/categoryApi';
 import { Transaction } from '../types/Transaction';
 
 interface CategoryAssignmentDialogProps {
@@ -35,7 +35,7 @@ const CategoryAssignmentDialog: React.FC<CategoryAssignmentDialogProps> = ({
   onClose, 
   onAssign
 }) => {
-  const [categories, setCategories] = useState<Category[]>([]);
+  const [parentCategories, setParentCategories] = useState<ParentCategory[]>([]);
   const [loading, setLoading] = useState(false);
   const [expanded, setExpanded] = useState<Record<number, boolean>>({});
   const [applyToSimilar, setApplyToSimilar] = useState(true); // Set to true by default
@@ -52,13 +52,13 @@ const CategoryAssignmentDialog: React.FC<CategoryAssignmentDialogProps> = ({
     setLoading(true);
     try {
       const data = await CategoryService.getAllCategories();
-      setCategories(data);
+      setParentCategories(data);
       
       // Initialize expansion state
       const initialExpanded: Record<number, boolean> = {};
-      data.forEach(category => {
-        if (category.id) {
-          initialExpanded[category.id] = false;
+      data.forEach(parentCategory => {
+        if (parentCategory.id) {
+          initialExpanded[parentCategory.id] = false;
         }
       });
       setExpanded(initialExpanded);
@@ -91,12 +91,61 @@ const CategoryAssignmentDialog: React.FC<CategoryAssignmentDialogProps> = ({
     }
   };
   
+  const renderParentCategories = () => {
+    return parentCategories.map(parentCategory => {
+      if (!parentCategory.id) return null;
+      
+      const hasChildren = parentCategory.children && parentCategory.children.length > 0;
+      
+      return (
+        <React.Fragment key={parentCategory.id}>
+          <ListItem
+            disablePadding
+            sx={{ pl: 0, pr: 2 }}
+          >
+            <ListItemButton 
+              onClick={() => handleAssign(parentCategory.id!)}
+              disabled={assigning}
+              dense
+            >
+              <ListItemText 
+                primary={parentCategory.name} 
+                secondary={parentCategory.description}
+              />
+            </ListItemButton>
+            
+            {hasChildren && (
+              <IconButton
+                edge="end"
+                aria-label="expand"
+                size="small"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleToggleExpand(parentCategory.id!);
+                }}
+              >
+                {expanded[parentCategory.id!] ? <ExpandLessIcon /> : <ExpandMoreIcon />}
+              </IconButton>
+            )}
+          </ListItem>
+          
+          {hasChildren && (
+            <Collapse in={expanded[parentCategory.id!]} timeout="auto" unmountOnExit>
+              <List disablePadding>
+                {renderCategoryList(parentCategory.children!, true)}
+              </List>
+            </Collapse>
+          )}
+        </React.Fragment>
+      );
+    });
+  };
+
   const renderCategoryList = (categoryList: Category[], isSubcategory = false) => {
     return categoryList.map(category => {
       if (!category.id) return null;
       
-      const hasChildren = category.children && category.children.length > 0;
-      
+      // No children in the new model for individual categories
       return (
         <React.Fragment key={category.id}>
           <ListItem
@@ -116,29 +165,8 @@ const CategoryAssignmentDialog: React.FC<CategoryAssignmentDialogProps> = ({
                 secondary={category.description}
               />
             </ListItemButton>
-            
-            {hasChildren && (
-              <IconButton
-                edge="end"
-                aria-label="expand"
-                size="small"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  handleToggleExpand(category.id!);
-                }}
-              >
-                {expanded[category.id!] ? <ExpandLessIcon /> : <ExpandMoreIcon />}
-              </IconButton>
-            )}
           </ListItem>
           
-          {hasChildren && (
-            <Collapse in={expanded[category.id!]} timeout="auto" unmountOnExit>
-              <List disablePadding>
-                {renderCategoryList(category.children!, true)}
-              </List>
-            </Collapse>
-          )}
         </React.Fragment>
       );
     });
@@ -181,7 +209,7 @@ const CategoryAssignmentDialog: React.FC<CategoryAssignmentDialogProps> = ({
             />
             
             <List sx={{ width: '100%' }}>
-              {renderCategoryList(categories)}
+              {renderParentCategories()}
             </List>
           </>
         )}

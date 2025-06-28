@@ -1,33 +1,26 @@
 import { Request, Response } from 'express';
 import { CategoryModel, TransactionCategoryModel, Category } from '../models/Category';
+import { ParentCategoryModel, ParentCategory } from '../models/ParentCategory';
+import { TransactionSimilarityPatternModel } from '../models/TransactionSimilarityPattern';
 import { TransactionModel } from '../models/Transaction';
 import * as stringSimilarity from 'string-similarity';
 
 export const CategoryController = {
   /**
-   * Get all categories
+   * Get all parent categories with their child categories
    */
   async getAllCategories(req: Request, res: Response): Promise<void> {
     try {
-      const categories = await CategoryModel.getAll();
+      // Get all parent categories
+      const parentCategories = await ParentCategoryModel.getAll();
       
-      // Organize categories into hierarchy
-      const rootCategories = categories.filter(c => !c.parent_id);
-      const childMap = new Map<number, Category[]>();
-      
-      categories
-        .filter(c => c.parent_id)
-        .forEach(child => {
-          const parentId = child.parent_id!;
-          if (!childMap.has(parentId)) {
-            childMap.set(parentId, []);
-          }
-          childMap.get(parentId)!.push(child);
-        });
-      
-      const result = rootCategories.map(root => ({
-        ...root,
-        children: childMap.get(root.id!) || []
+      // For each parent category, get its child categories
+      const result = await Promise.all(parentCategories.map(async (parent) => {
+        const childCategories = await ParentCategoryModel.getCategories(parent.id!);
+        return {
+          ...parent,
+          children: childCategories || []
+        };
       }));
       
       res.status(200).json({
@@ -40,6 +33,74 @@ export const CategoryController = {
       res.status(500).json({ 
         success: false, 
         message: 'Failed to retrieve categories' 
+      });
+    }
+  },
+  
+  /**
+   * Get all parent categories
+   */
+  async getAllParentCategories(req: Request, res: Response): Promise<void> {
+    try {
+      const parentCategories = await ParentCategoryModel.getAll();
+      
+      res.status(200).json({
+        success: true,
+        message: 'Parent categories retrieved successfully',
+        data: parentCategories
+      });
+    } catch (error) {
+      console.error('Error retrieving parent categories:', error);
+      res.status(500).json({ 
+        success: false, 
+        message: 'Failed to retrieve parent categories' 
+      });
+    }
+  },
+
+  /**
+   * Create a new parent category
+   */
+  async createParentCategory(req: Request, res: Response): Promise<void> {
+    try {
+      const { name, description } = req.body;
+      
+      if (!name) {
+        res.status(400).json({ 
+          success: false, 
+          message: 'Parent category name is required'
+        });
+        return;
+      }
+
+      // Check if parent category with same name already exists
+      const existing = await ParentCategoryModel.findByName(name);
+      if (existing) {
+        res.status(409).json({
+          success: false,
+          message: 'Parent category with this name already exists',
+          data: existing
+        });
+        return;
+      }
+
+      const parentCategoryId = await ParentCategoryModel.create({
+        name,
+        description
+      });
+
+      const newParentCategory = await ParentCategoryModel.getById(parentCategoryId);
+
+      res.status(201).json({
+        success: true,
+        message: 'Parent category created successfully',
+        data: newParentCategory
+      });
+    } catch (error) {
+      console.error('Error creating parent category:', error);
+      res.status(500).json({ 
+        success: false, 
+        message: 'Failed to create parent category' 
       });
     }
   },
@@ -69,6 +130,18 @@ export const CategoryController = {
         });
         return;
       }
+      
+      // Verify parent_id exists in parent_categories if provided
+      if (parent_id) {
+        const parentCategory = await ParentCategoryModel.getById(parent_id);
+        if (!parentCategory) {
+          res.status(400).json({ 
+            success: false, 
+            message: 'Invalid parent category ID' 
+          });
+          return;
+        }
+      }
 
       const categoryId = await CategoryModel.create({
         name,
@@ -92,6 +165,55 @@ export const CategoryController = {
     }
   },
 
+  /**
+   * Get a specific parent category by ID
+   */
+  async getParentCategory(req: Request, res: Response): Promise<void> {
+    try {
+      const parentCategoryId = parseInt(req.params.id);
+      
+      if (isNaN(parentCategoryId)) {
+        res.status(400).json({ 
+          success: false, 
+          message: 'Invalid parent category ID' 
+        });
+        return;
+      }
+
+      const parentCategory = await ParentCategoryModel.getById(parentCategoryId);
+      
+      if (!parentCategory) {
+        res.status(404).json({ 
+          success: false, 
+          message: 'Parent category not found' 
+        });
+        return;
+      }
+
+      // Get child categories
+      const children = await ParentCategoryModel.getCategories(parentCategoryId);
+
+      // Get transaction similarity patterns for this parent category
+      const patterns = await TransactionSimilarityPatternModel.getByParentCategoryId(parentCategoryId);
+
+      res.status(200).json({
+        success: true,
+        message: 'Parent category retrieved successfully',
+        data: {
+          ...parentCategory,
+          children,
+          patterns
+        }
+      });
+    } catch (error) {
+      console.error(`Error retrieving parent category #${req.params.id}:`, error);
+      res.status(500).json({ 
+        success: false, 
+        message: 'Failed to retrieve parent category' 
+      });
+    }
+  },
+  
   /**
    * Get a specific category by ID
    */
@@ -117,15 +239,15 @@ export const CategoryController = {
         return;
       }
 
-      // Get child categories if any
-      const children = await CategoryModel.getSubcategories(categoryId);
+      // Get transaction similarity patterns for this category
+      const patterns = await TransactionSimilarityPatternModel.getByCategoryId(categoryId);
 
       res.status(200).json({
         success: true,
         message: 'Category retrieved successfully',
         data: {
           ...category,
-          children
+          patterns
         }
       });
     } catch (error) {
@@ -137,6 +259,71 @@ export const CategoryController = {
     }
   },
 
+  /**
+   * Update a parent category
+   */
+  async updateParentCategory(req: Request, res: Response): Promise<void> {
+    try {
+      const parentCategoryId = parseInt(req.params.id);
+      const { name, description } = req.body;
+      
+      if (isNaN(parentCategoryId)) {
+        res.status(400).json({ 
+          success: false, 
+          message: 'Invalid parent category ID' 
+        });
+        return;
+      }
+
+      const parentCategory = await ParentCategoryModel.getById(parentCategoryId);
+      
+      if (!parentCategory) {
+        res.status(404).json({ 
+          success: false, 
+          message: 'Parent category not found' 
+        });
+        return;
+      }
+
+      // Check if name is being changed and if so, check for conflicts
+      if (name && name !== parentCategory.name) {
+        const existingWithName = await ParentCategoryModel.findByName(name);
+        if (existingWithName && existingWithName.id !== parentCategoryId) {
+          res.status(409).json({
+            success: false,
+            message: 'Another parent category with this name already exists'
+          });
+          return;
+        }
+      }
+
+      const success = await ParentCategoryModel.update(parentCategoryId, {
+        name,
+        description
+      });
+
+      if (success) {
+        const updatedParentCategory = await ParentCategoryModel.getById(parentCategoryId);
+        res.status(200).json({
+          success: true,
+          message: 'Parent category updated successfully',
+          data: updatedParentCategory
+        });
+      } else {
+        res.status(400).json({
+          success: false,
+          message: 'No changes made to the parent category'
+        });
+      }
+    } catch (error) {
+      console.error(`Error updating parent category #${req.params.id}:`, error);
+      res.status(500).json({ 
+        success: false, 
+        message: 'Failed to update parent category' 
+      });
+    }
+  },
+  
   /**
    * Update a category
    */
@@ -174,6 +361,18 @@ export const CategoryController = {
           return;
         }
       }
+      
+      // Verify parent_id exists in parent_categories if provided
+      if (parent_id) {
+        const parentCategory = await ParentCategoryModel.getById(parent_id);
+        if (!parentCategory) {
+          res.status(400).json({ 
+            success: false, 
+            message: 'Invalid parent category ID' 
+          });
+          return;
+        }
+      }
 
       const success = await CategoryModel.update(categoryId, {
         name,
@@ -204,6 +403,65 @@ export const CategoryController = {
   },
 
   /**
+   * Delete a parent category
+   */
+  async deleteParentCategory(req: Request, res: Response): Promise<void> {
+    try {
+      const parentCategoryId = parseInt(req.params.id);
+      
+      if (isNaN(parentCategoryId)) {
+        res.status(400).json({ 
+          success: false, 
+          message: 'Invalid parent category ID' 
+        });
+        return;
+      }
+
+      const parentCategory = await ParentCategoryModel.getById(parentCategoryId);
+      
+      if (!parentCategory) {
+        res.status(404).json({ 
+          success: false, 
+          message: 'Parent category not found' 
+        });
+        return;
+      }
+
+      // Check if this parent category has child categories
+      const children = await ParentCategoryModel.getCategories(parentCategoryId);
+      
+      if (children.length > 0) {
+        res.status(400).json({
+          success: false,
+          message: 'Cannot delete parent category that has child categories. Delete the child categories first.'
+        });
+        return;
+      }
+
+      // Delete any associated transaction similarity patterns
+      const patterns = await TransactionSimilarityPatternModel.getByParentCategoryId(parentCategoryId);
+      for (const pattern of patterns) {
+        await TransactionSimilarityPatternModel.delete(pattern.id!);
+      }
+
+      const success = await ParentCategoryModel.delete(parentCategoryId);
+
+      res.status(success ? 200 : 400).json({
+        success,
+        message: success 
+          ? 'Parent category deleted successfully' 
+          : 'Failed to delete parent category'
+      });
+    } catch (error) {
+      console.error(`Error deleting parent category #${req.params.id}:`, error);
+      res.status(500).json({ 
+        success: false, 
+        message: 'Failed to delete parent category' 
+      });
+    }
+  },
+  
+  /**
    * Delete a category
    */
   async deleteCategory(req: Request, res: Response): Promise<void> {
@@ -228,15 +486,10 @@ export const CategoryController = {
         return;
       }
 
-      // Check if this category has child categories
-      const children = await CategoryModel.getSubcategories(categoryId);
-      
-      if (children.length > 0) {
-        res.status(400).json({
-          success: false,
-          message: 'Cannot delete category that has subcategories. Delete the subcategories first.'
-        });
-        return;
+      // Delete any associated transaction similarity patterns
+      const patterns = await TransactionSimilarityPatternModel.getByCategoryId(categoryId);
+      for (const pattern of patterns) {
+        await TransactionSimilarityPatternModel.delete(pattern.id!);
       }
 
       const success = await CategoryModel.delete(categoryId);
@@ -256,6 +509,239 @@ export const CategoryController = {
     }
   },
 
+  /**
+   * Create transaction similarity pattern
+   */
+  async createTransactionSimilarityPattern(req: Request, res: Response): Promise<void> {
+    try {
+      const { pattern_type, pattern_value, parent_category_id, category_id, confidence_score } = req.body;
+      
+      if (!pattern_type || !pattern_value) {
+        res.status(400).json({ 
+          success: false, 
+          message: 'Pattern type and value are required'
+        });
+        return;
+      }
+      
+      // Verify at least one of parent_category_id or category_id is provided
+      if (!parent_category_id && !category_id) {
+        res.status(400).json({
+          success: false,
+          message: 'At least one of parent_category_id or category_id must be provided'
+        });
+        return;
+      }
+      
+      // Verify parent_category_id exists if provided
+      if (parent_category_id) {
+        const parentCategory = await ParentCategoryModel.getById(parent_category_id);
+        if (!parentCategory) {
+          res.status(400).json({ 
+            success: false, 
+            message: 'Invalid parent category ID' 
+          });
+          return;
+        }
+      }
+      
+      // Verify category_id exists if provided
+      if (category_id) {
+        const category = await CategoryModel.getById(category_id);
+        if (!category) {
+          res.status(400).json({ 
+            success: false, 
+            message: 'Invalid category ID' 
+          });
+          return;
+        }
+      }
+
+      const patternId = await TransactionSimilarityPatternModel.create({
+        pattern_type,
+        pattern_value,
+        parent_category_id: parent_category_id || null,
+        category_id: category_id || null,
+        confidence_score: confidence_score || 1.0
+      });
+
+      const newPattern = await TransactionSimilarityPatternModel.getById(patternId);
+
+      res.status(201).json({
+        success: true,
+        message: 'Transaction similarity pattern created successfully',
+        data: newPattern
+      });
+    } catch (error) {
+      console.error('Error creating transaction similarity pattern:', error);
+      res.status(500).json({ 
+        success: false, 
+        message: 'Failed to create transaction similarity pattern' 
+      });
+    }
+  },
+  
+  /**
+   * Get transaction similarity pattern by ID
+   */
+  async getTransactionSimilarityPattern(req: Request, res: Response): Promise<void> {
+    try {
+      const patternId = parseInt(req.params.id);
+      
+      if (isNaN(patternId)) {
+        res.status(400).json({ 
+          success: false, 
+          message: 'Invalid pattern ID' 
+        });
+        return;
+      }
+
+      const pattern = await TransactionSimilarityPatternModel.getById(patternId);
+      
+      if (!pattern) {
+        res.status(404).json({ 
+          success: false, 
+          message: 'Transaction similarity pattern not found' 
+        });
+        return;
+      }
+
+      res.status(200).json({
+        success: true,
+        message: 'Transaction similarity pattern retrieved successfully',
+        data: pattern
+      });
+    } catch (error) {
+      console.error(`Error retrieving transaction similarity pattern #${req.params.id}:`, error);
+      res.status(500).json({ 
+        success: false, 
+        message: 'Failed to retrieve transaction similarity pattern' 
+      });
+    }
+  },
+  
+  /**
+   * Update transaction similarity pattern
+   */
+  async updateTransactionSimilarityPattern(req: Request, res: Response): Promise<void> {
+    try {
+      const patternId = parseInt(req.params.id);
+      const { pattern_type, pattern_value, parent_category_id, category_id, confidence_score } = req.body;
+      
+      if (isNaN(patternId)) {
+        res.status(400).json({ 
+          success: false, 
+          message: 'Invalid pattern ID' 
+        });
+        return;
+      }
+
+      const pattern = await TransactionSimilarityPatternModel.getById(patternId);
+      
+      if (!pattern) {
+        res.status(404).json({ 
+          success: false, 
+          message: 'Transaction similarity pattern not found' 
+        });
+        return;
+      }
+      
+      // Verify parent_category_id exists if provided
+      if (parent_category_id) {
+        const parentCategory = await ParentCategoryModel.getById(parent_category_id);
+        if (!parentCategory) {
+          res.status(400).json({ 
+            success: false, 
+            message: 'Invalid parent category ID' 
+          });
+          return;
+        }
+      }
+      
+      // Verify category_id exists if provided
+      if (category_id) {
+        const category = await CategoryModel.getById(category_id);
+        if (!category) {
+          res.status(400).json({ 
+            success: false, 
+            message: 'Invalid category ID' 
+          });
+          return;
+        }
+      }
+
+      const success = await TransactionSimilarityPatternModel.update(patternId, {
+        pattern_type,
+        pattern_value,
+        parent_category_id: parent_category_id || null,
+        category_id: category_id || null,
+        confidence_score
+      });
+
+      if (success) {
+        const updatedPattern = await TransactionSimilarityPatternModel.getById(patternId);
+        res.status(200).json({
+          success: true,
+          message: 'Transaction similarity pattern updated successfully',
+          data: updatedPattern
+        });
+      } else {
+        res.status(400).json({
+          success: false,
+          message: 'No changes made to the transaction similarity pattern'
+        });
+      }
+    } catch (error) {
+      console.error(`Error updating transaction similarity pattern #${req.params.id}:`, error);
+      res.status(500).json({ 
+        success: false, 
+        message: 'Failed to update transaction similarity pattern' 
+      });
+    }
+  },
+  
+  /**
+   * Delete transaction similarity pattern
+   */
+  async deleteTransactionSimilarityPattern(req: Request, res: Response): Promise<void> {
+    try {
+      const patternId = parseInt(req.params.id);
+      
+      if (isNaN(patternId)) {
+        res.status(400).json({ 
+          success: false, 
+          message: 'Invalid pattern ID' 
+        });
+        return;
+      }
+
+      const pattern = await TransactionSimilarityPatternModel.getById(patternId);
+      
+      if (!pattern) {
+        res.status(404).json({ 
+          success: false, 
+          message: 'Transaction similarity pattern not found' 
+        });
+        return;
+      }
+
+      const success = await TransactionSimilarityPatternModel.delete(patternId);
+
+      res.status(success ? 200 : 400).json({
+        success,
+        message: success 
+          ? 'Transaction similarity pattern deleted successfully' 
+          : 'Failed to delete transaction similarity pattern'
+      });
+    } catch (error) {
+      console.error(`Error deleting transaction similarity pattern #${req.params.id}:`, error);
+      res.status(500).json({ 
+        success: false, 
+        message: 'Failed to delete transaction similarity pattern' 
+      });
+    }
+  },
+  
   /**
    * Assign a category to a transaction
    */
