@@ -14,6 +14,7 @@ export interface TransactionCategory {
   id?: number;
   transaction_id: number;
   category_id: number;
+  parent_category_id?: number | null;
   created_at?: string;
 }
 
@@ -153,9 +154,13 @@ export class TransactionCategoryModel {
       return existing.id!;
     }
 
+    // Get the parent_category_id from the categories table
+    const category = await CategoryModel.getById(categoryId);
+    const parentCategoryId = category?.parent_id || null;
+
     const result = await run(
-      'INSERT INTO transaction_categories (transaction_id, category_id) VALUES (?, ?)',
-      [transactionId, categoryId]
+      'INSERT INTO transaction_categories (transaction_id, category_id, parent_category_id) VALUES (?, ?, ?)',
+      [transactionId, categoryId, parentCategoryId]
     );
 
     return result.lastID;
@@ -166,9 +171,10 @@ export class TransactionCategoryModel {
    */
   static async getCategoriesForTransaction(transactionId: number): Promise<Category[]> {
     return query<Category>(
-      `SELECT c.* 
+      `SELECT c.*, pc.name as parent_name 
        FROM categories c
        JOIN transaction_categories tc ON c.id = tc.category_id
+       LEFT JOIN parent_categories pc ON c.parent_id = pc.id
        WHERE tc.transaction_id = ?
        ORDER BY c.name`,
       [transactionId]

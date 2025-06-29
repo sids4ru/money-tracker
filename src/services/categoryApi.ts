@@ -246,31 +246,18 @@ export const CategoryService = {
     try {
       const response = await api.get(`/categories/transaction/${transactionId}`);
       
-      // Transform the data from the API to include parent category information
+      // Transform the data but don't make additional API calls
+      // The backend now includes parent_name in the response
       const categories = response.data.data;
-      const transformedCategories: CategoryInfo[] = await Promise.all(
-        categories.map(async (category: Category) => {
-          let parentName = undefined;
-          
-          // If the category has a parent_id, fetch the parent category to get its name
-          if (category.parent_id) {
-            try {
-              const parentCategory = await this.getParentCategory(category.parent_id);
-              parentName = parentCategory.name;
-            } catch (err) {
-              console.error('Error fetching parent category:', err);
-            }
-          }
-          
-          return {
-            id: category.id!,
-            name: category.name,
-            description: category.description,
-            parentId: category.parent_id,
-            parentName: parentName
-          };
-        })
-      );
+      const transformedCategories: CategoryInfo[] = categories.map((category: any) => {
+        return {
+          id: category.id!,
+          name: category.name,
+          description: category.description,
+          parentId: category.parent_id,
+          parentName: category.parent_name // Using the parent_name from the JOIN query
+        };
+      });
       
       return transformedCategories;
     } catch (error) {

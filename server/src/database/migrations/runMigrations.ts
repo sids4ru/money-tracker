@@ -13,7 +13,8 @@ const runMigrations = async (): Promise<void> => {
     const migrations = [
       { name: 'align_with_er_diagram', file: 'align_with_er_diagram.sql' },
       { name: 'add_transaction_unique_constraint', file: 'add_transaction_unique_constraint.sql' },
-      { name: 'add_common_categories', file: 'add_common_categories.sql' }
+      { name: 'add_common_categories', file: 'add_common_categories.sql' },
+      { name: 'add_parent_category_id_to_transaction_categories', file: 'add_parent_category_id_to_transaction_categories.sql' }
     ];
 
     for (const migration of migrations) {

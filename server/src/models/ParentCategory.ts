@@ -91,4 +91,18 @@ export class ParentCategoryModel {
       [parentId]
     );
   }
+  
+  /**
+   * Get all parent categories with their children in a single efficient query
+   */
+  static async getAllWithChildren(): Promise<any[]> {
+    return query(`
+      SELECT pc.*, 
+             c.id as child_id, c.name as child_name, 
+             c.description as child_description, c.created_at as child_created_at
+      FROM parent_categories pc
+      LEFT JOIN categories c ON pc.id = c.parent_id
+      ORDER BY pc.name, c.name
+    `);
+  }
 }

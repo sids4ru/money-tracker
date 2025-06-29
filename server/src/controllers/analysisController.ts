@@ -1,6 +1,5 @@
 import { Request, Response } from 'express';
-import { TransactionModel, Transaction } from '../models/Transaction';
-import { CategoryModel } from '../models/Category';
+import { query } from '../database/db';
 import { ParentCategoryModel } from '../models/ParentCategory';
 
 /**
@@ -9,17 +8,9 @@ import { ParentCategoryModel } from '../models/ParentCategory';
 export const getSpendingByParentCategoryPerMonth = async (req: Request, res: Response): Promise<void> => {
   try {
     const year = parseInt(req.query.year as string) || new Date().getFullYear();
-    const startDate = `${year}-01-01`;
-    const endDate = `${year}-12-31`;
     
     // Get all parent categories
     const parentCategories = await ParentCategoryModel.getAll();
-    
-    // Get all transactions for the year with their categories
-    const transactions = await TransactionModel.search({
-      startDate,
-      endDate
-    });
     
     // Initialize result structure
     const result: {
@@ -41,33 +32,106 @@ export const getSpendingByParentCategoryPerMonth = async (req: Request, res: Res
       }))
     };
     
-    // Process transactions
-    for (const transaction of transactions) {
-      // Skip transactions without categories
-      if (!transaction.category_id) continue;
+    // Add debug info
+    console.log(`Fetching spending data for year: ${year}`);
+    
+    // SQL query to get monthly spending by parent category
+    // Using parent_category_id directly from transaction_categories for better efficiency
+    const monthlySpendingData = await query<{
+      parent_id: number;
+      month: number; // 1-based month
+      total: number;
+    }>(`
+      SELECT 
+        tc.parent_category_id as parent_id,
+        CAST(strftime('%m', t.transaction_date) AS INTEGER) AS month,
+        SUM(
+          CASE
+            WHEN t.debit_amount IS NOT NULL THEN -CAST(REPLACE(t.debit_amount, ',', '') AS REAL)
+            WHEN t.credit_amount IS NOT NULL THEN CAST(REPLACE(t.credit_amount, ',', '') AS REAL)
+            ELSE 0
+          END
+        ) AS total
+      FROM 
+        transaction_categories tc
+      JOIN
+        transactions t ON tc.transaction_id = t.id  
+      WHERE 
+        strftime('%Y', t.transaction_date) = ? 
+        AND tc.parent_category_id IS NOT NULL
+      GROUP BY 
+        tc.parent_category_id, month
+      ORDER BY 
+        tc.parent_category_id, month
+    `, [year.toString()]);
+    
+    console.log(`Monthly spending data from transaction_categories: ${JSON.stringify(monthlySpendingData)}`);
+    
+    // Now handle transactions with category_id directly set on the transaction
+    const directCategorySpending = await query<{
+      parent_id: number;
+      month: number; // 1-based month
+      total: number;
+    }>(`
+      SELECT 
+        c.parent_id,
+        CAST(strftime('%m', t.transaction_date) AS INTEGER) AS month,
+        SUM(
+          CASE
+            WHEN t.debit_amount IS NOT NULL THEN -CAST(REPLACE(t.debit_amount, ',', '') AS REAL)
+            WHEN t.credit_amount IS NOT NULL THEN CAST(REPLACE(t.credit_amount, ',', '') AS REAL)
+            ELSE 0
+          END
+        ) AS total
+      FROM 
+        transactions t
+      JOIN 
+        categories c ON t.category_id = c.id
+      WHERE 
+        strftime('%Y', t.transaction_date) = ? 
+        AND c.parent_id IS NOT NULL
+        AND t.category_id IS NOT NULL
+      GROUP BY 
+        c.parent_id, month
+      ORDER BY 
+        c.parent_id, month
+    `, [year.toString()]);
+    
+    console.log(`Monthly spending data from direct category_id: ${JSON.stringify(directCategorySpending)}`);
+    
+    // Return empty data if no transactions are found - don't generate random data
+    if (monthlySpendingData.length === 0 && directCategorySpending.length === 0) {
+      console.log("No spending data found for the specified year");
       
-      // Get the category and its parent
-      const category = await CategoryModel.getById(transaction.category_id);
-      if (!category || !category.parent_id) continue;
+      res.json({
+        success: true,
+        data: result
+      });
+      return;
+    }
+    
+    // Merge the two result sets
+    for (const spending of directCategorySpending) {
+      const existingIndex = monthlySpendingData.findIndex(
+        item => item.parent_id === spending.parent_id && item.month === spending.month
+      );
       
-      // Find the parent category in our result
-      const parentCategoryIndex = result.categories.findIndex(pc => pc.id === category.parent_id);
-      if (parentCategoryIndex === -1) continue;
-      
-      // Determine the transaction amount (debit is negative, credit is positive for spending calculations)
-      let amount = 0;
-      if (transaction.debit_amount) {
-        amount = -parseFloat(transaction.debit_amount.replace(/,/g, ''));
-      } else if (transaction.credit_amount) {
-        amount = parseFloat(transaction.credit_amount.replace(/,/g, ''));
+      if (existingIndex !== -1) {
+        // Add to existing data
+        monthlySpendingData[existingIndex].total += spending.total;
+      } else {
+        // Add new data point
+        monthlySpendingData.push(spending);
       }
-      
-      // Get the month (0-based in JavaScript Date)
-      const transactionDate = new Date(transaction.transaction_date);
-      const month = transactionDate.getMonth();
-      
-      // Add the amount to the appropriate month for this parent category
-      result.categories[parentCategoryIndex].data[month] += amount;
+    }
+    
+    // Process the SQL results into our result structure
+    for (const spending of monthlySpendingData) {
+      const categoryIndex = result.categories.findIndex(cat => cat.id === spending.parent_id);
+      if (categoryIndex !== -1) {
+        // Month is 1-based in SQL result, but 0-based in our array
+        result.categories[categoryIndex].data[spending.month - 1] = spending.total;
+      }
     }
     
     res.json({
@@ -102,62 +166,119 @@ export const getSpendingByCategoryForMonth = async (req: Request, res: Response)
       return;
     }
     
-    // Calculate start and end dates for the month
-    const startDate = `${year}-${month.toString().padStart(2, '0')}-01`;
-    let endDate: string;
+    // Format month for SQL query (ensure it's two digits)
+    const monthFormatted = month.toString().padStart(2, '0');
     
-    // Calculate the last day of the month
-    if (month === 12) {
-      endDate = `${year}-12-31`;
-    } else {
-      endDate = `${year}-${(month + 1).toString().padStart(2, '0')}-01`;
-      endDate = new Date(new Date(endDate).getTime() - 86400000).toISOString().split('T')[0];
+    // Add debug info
+    console.log(`Fetching category spending data for parent: ${parentCategoryId}, month: ${month}, year: ${year}`);
+    
+    // SQL query to get category spending for a specific month and parent category
+    // Using parent_category_id directly from transaction_categories for better efficiency
+    const categorySpendingData = await query<{
+      id: number;
+      name: string;
+      total: number;
+    }>(`
+      SELECT 
+        c.id,
+        c.name,
+        SUM(
+          CASE
+            WHEN t.debit_amount IS NOT NULL THEN -CAST(REPLACE(t.debit_amount, ',', '') AS REAL)
+            WHEN t.credit_amount IS NOT NULL THEN CAST(REPLACE(t.credit_amount, ',', '') AS REAL)
+            ELSE 0
+          END
+        ) AS total
+      FROM 
+        transaction_categories tc
+      JOIN 
+        transactions t ON tc.transaction_id = t.id
+      JOIN 
+        categories c ON tc.category_id = c.id
+      WHERE 
+        tc.parent_category_id = ?
+        AND strftime('%Y-%m', t.transaction_date) = ?
+      GROUP BY 
+        c.id, c.name
+      ORDER BY 
+        ABS(total) DESC
+    `, [parentCategoryId, `${year}-${monthFormatted}`]);
+    
+    console.log(`Category spending data from transaction_categories: ${JSON.stringify(categorySpendingData)}`);
+    
+    // Now handle transactions with category_id directly set on the transaction
+    const directCategorySpending = await query<{
+      id: number;
+      name: string;
+      total: number;
+    }>(`
+      SELECT 
+        c.id,
+        c.name,
+        SUM(
+          CASE
+            WHEN t.debit_amount IS NOT NULL THEN -CAST(REPLACE(t.debit_amount, ',', '') AS REAL)
+            WHEN t.credit_amount IS NOT NULL THEN CAST(REPLACE(t.credit_amount, ',', '') AS REAL)
+            ELSE 0
+          END
+        ) AS total
+      FROM 
+        transactions t
+      JOIN 
+        categories c ON t.category_id = c.id
+      WHERE 
+        c.parent_id = ?
+        AND strftime('%Y-%m', t.transaction_date) = ?
+        AND t.category_id IS NOT NULL
+      GROUP BY 
+        c.id, c.name
+      ORDER BY 
+        ABS(total) DESC
+    `, [parentCategoryId, `${year}-${monthFormatted}`]);
+    
+    console.log(`Category spending data from direct category_id: ${JSON.stringify(directCategorySpending)}`);
+    
+    // Return empty data if no transactions are found - don't generate random data
+    if (categorySpendingData.length === 0 && directCategorySpending.length === 0) {
+      console.log(`No category spending data found for parent: ${parentCategoryId}, month: ${month}, year: ${year}`);
+      
+      res.json({
+        success: true,
+        data: {
+          parentId: parentCategoryId,
+          month,
+          year,
+          categories: []
+        }
+      });
+      return;
     }
     
-    // Get all categories for the parent category
-    const categories = await ParentCategoryModel.getCategories(parentCategoryId);
+    // Merge the two result sets
+    const mergedCategorySpending = [...categorySpendingData];
     
-    // Get all transactions for the period
-    const transactions = await TransactionModel.search({
-      startDate,
-      endDate
-    });
+    for (const spending of directCategorySpending) {
+      const existingIndex = mergedCategorySpending.findIndex(item => item.id === spending.id);
+      
+      if (existingIndex !== -1) {
+        // Add to existing data
+        mergedCategorySpending[existingIndex].total += spending.total;
+      } else {
+        // Add new data point
+        mergedCategorySpending.push(spending);
+      }
+    }
     
-    // Initialize result structure
+    // Re-sort after merging
+    mergedCategorySpending.sort((a, b) => Math.abs(b.total) - Math.abs(a.total));
+    
+    // Format the result
     const result = {
       parentId: parentCategoryId,
       month,
       year,
-      categories: categories.map((cat: any) => ({
-        id: cat.id,
-        name: cat.name,
-        total: 0
-      }))
+      categories: mergedCategorySpending
     };
-    
-    // Process transactions
-    for (const transaction of transactions) {
-      // Skip transactions without categories
-      if (!transaction.category_id) continue;
-      
-      // Check if this transaction belongs to one of our categories
-      const categoryIndex = result.categories.findIndex(cat => cat.id === transaction.category_id);
-      if (categoryIndex === -1) continue;
-      
-      // Determine the transaction amount (debit is negative, credit is positive for spending calculations)
-      let amount = 0;
-      if (transaction.debit_amount) {
-        amount = -parseFloat(transaction.debit_amount.replace(/,/g, ''));
-      } else if (transaction.credit_amount) {
-        amount = parseFloat(transaction.credit_amount.replace(/,/g, ''));
-      }
-      
-      // Add the amount to the category total
-      result.categories[categoryIndex].total += amount;
-    }
-    
-    // Sort categories by total (descending)
-    result.categories.sort((a, b) => Math.abs(b.total) - Math.abs(a.total));
     
     res.json({
       success: true,

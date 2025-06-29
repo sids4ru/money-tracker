@@ -11,17 +11,37 @@ export const CategoryController = {
    */
   async getAllCategories(req: Request, res: Response): Promise<void> {
     try {
-      // Get all parent categories
-      const parentCategories = await ParentCategoryModel.getAll();
+      // Get all parent categories with their children in a single query
+      const results = await ParentCategoryModel.getAllWithChildren();
       
-      // For each parent category, get its child categories
-      const result = await Promise.all(parentCategories.map(async (parent) => {
-        const childCategories = await ParentCategoryModel.getCategories(parent.id!);
-        return {
-          ...parent,
-          children: childCategories || []
-        };
-      }));
+      // Process the flat results into a hierarchical structure
+      const parentCategoriesMap = new Map();
+      
+      results.forEach(row => {
+        if (!parentCategoriesMap.has(row.id)) {
+          // Create the parent category entry
+          parentCategoriesMap.set(row.id, {
+            id: row.id,
+            name: row.name,
+            description: row.description,
+            created_at: row.created_at,
+            children: []
+          });
+        }
+        
+        // Add child if it exists (row.child_id will be null for parent categories with no children)
+        if (row.child_id) {
+          parentCategoriesMap.get(row.id).children.push({
+            id: row.child_id,
+            name: row.child_name,
+            description: row.child_description,
+            parent_id: row.id,
+            created_at: row.child_created_at
+          });
+        }
+      });
+      
+      const result = Array.from(parentCategoriesMap.values());
       
       res.status(200).json({
         success: true,

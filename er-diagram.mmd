@@ -1,3 +1,20 @@
+%%{
+  init: {
+    'theme': 'base',
+    'themeVariables': {
+      'primaryColor': '#ffffff',
+      'primaryTextColor': '#000000',
+      'primaryBorderColor': '#000000',
+      'lineColor': '#000000',
+      'secondaryColor': '#f5f5f5',
+      'tertiaryColor': '#ffffff'
+    },
+    'er': {
+      'diagramPadding': 20
+    }
+  }
+}%%
+%% Generate PNG with: mmdc -i er-diagram.mmd -o er-diagram.png -b white -w 2000 -H 2000
 erDiagram
     transactions {
         int id PK
@@ -14,8 +31,6 @@ erDiagram
         text local_currency_amount
         text local_currency
         text grouping_status "manual/auto/none/null"
-        int transaction_category_id FK
-        int category_id
         text created_at "NOT NULL DEFAULT now"
     }
     
@@ -38,6 +53,7 @@ erDiagram
         int id PK
         int transaction_id FK "NOT NULL UNIQUE"
         int category_id FK "NOT NULL"
+        int parent_category_id FK "References parent_categories"
         text created_at "NOT NULL DEFAULT now"
     }
     
@@ -45,17 +61,17 @@ erDiagram
         int id PK
         text pattern_type "NOT NULL"
         text pattern_value "NOT NULL"
-        int parent_category_id FK
-        int category_id FK "NOT NULL"
+        int parent_category_id FK "References parent_categories"
+        int category_id FK "References categories"
         real confidence_score "NOT NULL DEFAULT 1.0"
         timestamp created_at "DEFAULT TIMESTAMP"
         timestamp updated_at "DEFAULT TIMESTAMP"
         int usage_count "DEFAULT 0"
     }
     
-    transactions ||--o| transaction_categories : "has one category assignment"
-    transaction_categories }o--|| categories : "references"
-    transactions ||--o| transaction_categories : "references via transaction_category_id"
-    parent_categories ||--o{ categories : "parent of"
-    categories ||--o{ transaction_similarity_patterns : "referenced by"
-    parent_categories ||--o{ transaction_similarity_patterns : "referenced by"
+    transactions ||--o| transaction_categories : "has one category assignment via transaction_id"
+    transaction_categories }o--|| categories : "references via category_id"
+    transaction_categories }o--|| parent_categories : "references via parent_category_id"
+    parent_categories ||--o{ categories : "parent of via parent_id"
+    categories ||--o{ transaction_similarity_patterns : "referenced by via category_id"
+    parent_categories ||--o{ transaction_similarity_patterns : "referenced by via parent_category_id"

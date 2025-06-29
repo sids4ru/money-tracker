@@ -94,7 +94,7 @@ const ParentCategoryLineChart: React.FC<ParentCategoryLineChartProps> = ({ year 
     labels: spendingData.months,
     datasets: spendingData.categories.map((category, index) => ({
       label: category.name,
-      data: category.data.map(value => Math.abs(value)), // Use absolute value for better visualization
+      data: category.data, // Use actual values, not absolute values
       borderColor: backgroundColors[index],
       backgroundColor: backgroundColors[index].replace('0.7', '0.1'),
       borderWidth: 2,
@@ -137,7 +137,8 @@ const ParentCategoryLineChart: React.FC<ParentCategoryLineChartProps> = ({ year 
     },
     scales: {
       y: {
-        beginAtZero: true,
+        // Allow negative values to show properly
+        beginAtZero: false,
         ticks: {
           callback: function(value) {
             return new Intl.NumberFormat('en-US', {

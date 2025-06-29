@@ -116,7 +116,7 @@ const CategoryBarChart: React.FC<CategoryBarChartProps> = ({
     datasets: [
       {
         label: 'Spending',
-        data: spendingData.categories.map(cat => Math.abs(cat.total)), // Absolute value for better visualization
+        data: spendingData.categories.map(cat => cat.total), // Use actual values, not absolute values
         backgroundColor: backgroundColors,
         borderColor: backgroundColors.map(color => color.replace('0.7', '1')),
         borderWidth: 1
@@ -159,7 +159,8 @@ const CategoryBarChart: React.FC<CategoryBarChartProps> = ({
     },
     scales: {
       x: {
-        beginAtZero: true,
+        // Allow negative values to show properly
+        beginAtZero: false,
         ticks: {
           callback: function(value) {
             return new Intl.NumberFormat('en-US', {
