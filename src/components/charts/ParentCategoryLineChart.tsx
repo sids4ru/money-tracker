@@ -76,25 +76,22 @@ const ParentCategoryLineChart: React.FC<ParentCategoryLineChartProps> = ({ year 
     );
   }
 
-  // Generate random colors for each category
-  const generateColors = (count: number) => {
-    const colors = [];
-    for (let i = 0; i < count; i++) {
-      const r = Math.floor(Math.random() * 200);
-      const g = Math.floor(Math.random() * 200);
-      const b = Math.floor(Math.random() * 200);
-      colors.push(`rgba(${r}, ${g}, ${b}, 0.7)`);
-    }
-    return colors;
+  // Generate consistent colors based on category ID
+  const generateColorForCategory = (id: number) => {
+    // Use the ID as a seed for consistent color generation
+    const hue = (id * 137.5) % 360; // Golden ratio to distribute colors nicely
+    return `hsla(${hue}, 70%, 60%, 0.7)`;
   };
 
-  const backgroundColors = generateColors(spendingData.categories.length);
+  const backgroundColors = spendingData.categories.map(category => 
+    generateColorForCategory(category.id)
+  );
 
   const chartData = {
     labels: spendingData.months,
     datasets: spendingData.categories.map((category, index) => ({
       label: category.name,
-      data: category.data, // Use actual values, not absolute values
+      data: category.data.map(value => Math.abs(value)), // Use absolute values
       borderColor: backgroundColors[index],
       backgroundColor: backgroundColors[index].replace('0.7', '0.1'),
       borderWidth: 2,
@@ -119,26 +116,48 @@ const ParentCategoryLineChart: React.FC<ParentCategoryLineChartProps> = ({ year 
       },
       tooltip: {
         callbacks: {
+          title: function(tooltipItems) {
+            // Display the month name
+            return tooltipItems[0].label;
+          },
           label: function(context) {
-            let label = context.dataset.label || '';
-            if (label) {
-              label += ': ';
+            // Get the original value (not the absolute one)
+            const originalValue = spendingData.categories[context.datasetIndex].data[context.dataIndex];
+            let displayLabel = context.dataset.label || '';
+            if (displayLabel) {
+              displayLabel += ': ';
             }
-            if (context.parsed.y !== null) {
-              label += new Intl.NumberFormat('en-US', {
-                style: 'currency',
-                currency: 'EUR'
-              }).format(context.parsed.y);
+            // Format the amount as currency
+            displayLabel += new Intl.NumberFormat('en-US', {
+              style: 'currency',
+              currency: 'EUR'
+            }).format(Math.abs(originalValue));
+            
+            // Add a note if it's income (+) or expense (-)
+            if (originalValue > 0) {
+              displayLabel += ' (Income)';
+            } else if (originalValue < 0) {
+              displayLabel += ' (Expense)';
             }
-            return label;
+            
+            return displayLabel;
           }
+        },
+        // Make tooltip more visible with type-safe properties
+        backgroundColor: 'rgba(0,0,0,0.8)',
+        padding: { top: 10, bottom: 10, left: 10, right: 10 },
+        titleFont: {
+          size: 14
+        },
+        bodyFont: {
+          size: 13
         }
       }
     },
     scales: {
       y: {
-        // Allow negative values to show properly
-        beginAtZero: false,
+        // Since we're using absolute values, always start at zero
+        beginAtZero: true,
         ticks: {
           callback: function(value) {
             return new Intl.NumberFormat('en-US', {

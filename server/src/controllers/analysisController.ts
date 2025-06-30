@@ -37,6 +37,7 @@ export const getSpendingByParentCategoryPerMonth = async (req: Request, res: Res
     
     // SQL query to get monthly spending by parent category
     // Using parent_category_id directly from transaction_categories for better efficiency
+    // Note: transaction_date is in DD/MM/YYYY format, so we need to extract month and year differently
     const monthlySpendingData = await query<{
       parent_id: number;
       month: number; // 1-based month
@@ -44,7 +45,7 @@ export const getSpendingByParentCategoryPerMonth = async (req: Request, res: Res
     }>(`
       SELECT 
         tc.parent_category_id as parent_id,
-        CAST(strftime('%m', t.transaction_date) AS INTEGER) AS month,
+        CAST(substr(t.transaction_date, 4, 2) AS INTEGER) AS month,
         SUM(
           CASE
             WHEN t.debit_amount IS NOT NULL THEN -CAST(REPLACE(t.debit_amount, ',', '') AS REAL)
@@ -57,7 +58,7 @@ export const getSpendingByParentCategoryPerMonth = async (req: Request, res: Res
       JOIN
         transactions t ON tc.transaction_id = t.id  
       WHERE 
-        strftime('%Y', t.transaction_date) = ? 
+        substr(t.transaction_date, 7, 4) = ? 
         AND tc.parent_category_id IS NOT NULL
       GROUP BY 
         tc.parent_category_id, month
@@ -68,6 +69,7 @@ export const getSpendingByParentCategoryPerMonth = async (req: Request, res: Res
     console.log(`Monthly spending data from transaction_categories: ${JSON.stringify(monthlySpendingData)}`);
     
     // Now handle transactions with category_id directly set on the transaction
+    // Note: transaction_date is in DD/MM/YYYY format, so we need to extract month and year differently
     const directCategorySpending = await query<{
       parent_id: number;
       month: number; // 1-based month
@@ -75,7 +77,7 @@ export const getSpendingByParentCategoryPerMonth = async (req: Request, res: Res
     }>(`
       SELECT 
         c.parent_id,
-        CAST(strftime('%m', t.transaction_date) AS INTEGER) AS month,
+        CAST(substr(t.transaction_date, 4, 2) AS INTEGER) AS month,
         SUM(
           CASE
             WHEN t.debit_amount IS NOT NULL THEN -CAST(REPLACE(t.debit_amount, ',', '') AS REAL)
@@ -88,7 +90,7 @@ export const getSpendingByParentCategoryPerMonth = async (req: Request, res: Res
       JOIN 
         categories c ON t.category_id = c.id
       WHERE 
-        strftime('%Y', t.transaction_date) = ? 
+        substr(t.transaction_date, 7, 4) = ? 
         AND c.parent_id IS NOT NULL
         AND t.category_id IS NOT NULL
       GROUP BY 
@@ -173,7 +175,7 @@ export const getSpendingByCategoryForMonth = async (req: Request, res: Response)
     console.log(`Fetching category spending data for parent: ${parentCategoryId}, month: ${month}, year: ${year}`);
     
     // SQL query to get category spending for a specific month and parent category
-    // Using parent_category_id directly from transaction_categories for better efficiency
+    // Note: transaction_date is in DD/MM/YYYY format, so we need to extract month and year differently
     const categorySpendingData = await query<{
       id: number;
       name: string;
@@ -197,16 +199,17 @@ export const getSpendingByCategoryForMonth = async (req: Request, res: Response)
         categories c ON tc.category_id = c.id
       WHERE 
         tc.parent_category_id = ?
-        AND strftime('%Y-%m', t.transaction_date) = ?
+        AND substr(t.transaction_date, 7, 4) = ? AND substr(t.transaction_date, 4, 2) = ?
       GROUP BY 
         c.id, c.name
       ORDER BY 
         ABS(total) DESC
-    `, [parentCategoryId, `${year}-${monthFormatted}`]);
+    `, [parentCategoryId, year.toString(), monthFormatted]);
     
     console.log(`Category spending data from transaction_categories: ${JSON.stringify(categorySpendingData)}`);
     
     // Now handle transactions with category_id directly set on the transaction
+    // Note: transaction_date is in DD/MM/YYYY format, so we need to extract month and year differently
     const directCategorySpending = await query<{
       id: number;
       name: string;
@@ -228,13 +231,13 @@ export const getSpendingByCategoryForMonth = async (req: Request, res: Response)
         categories c ON t.category_id = c.id
       WHERE 
         c.parent_id = ?
-        AND strftime('%Y-%m', t.transaction_date) = ?
+        AND substr(t.transaction_date, 7, 4) = ? AND substr(t.transaction_date, 4, 2) = ?
         AND t.category_id IS NOT NULL
       GROUP BY 
         c.id, c.name
       ORDER BY 
         ABS(total) DESC
-    `, [parentCategoryId, `${year}-${monthFormatted}`]);
+    `, [parentCategoryId, year.toString(), monthFormatted]);
     
     console.log(`Category spending data from direct category_id: ${JSON.stringify(directCategorySpending)}`);
     

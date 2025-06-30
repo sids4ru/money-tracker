@@ -99,29 +99,39 @@ const CategoryBarChart: React.FC<CategoryBarChartProps> = ({
   ];
   const monthName = monthNames[month - 1];
 
-  // Generate a color for each category
-  const generateColors = (count: number) => {
-    const colors = [];
-    for (let i = 0; i < count; i++) {
-      const hue = (i * 137.5) % 360; // Use golden ratio to distribute colors
-      colors.push(`hsla(${hue}, 70%, 60%, 0.7)`);
-    }
-    return colors;
+  // Use our shared utility function to generate colors
+  const generateColorForCategory = (id: number) => {
+    // Use the ID as a seed for consistent color generation
+    const hue = (id * 137.5) % 360; // Golden ratio to distribute colors nicely
+    return `hsla(${hue}, 70%, 60%, 0.7)`;
   };
 
-  const backgroundColors = generateColors(spendingData.categories.length);
+  const backgroundColors = spendingData.categories.map(category => 
+    generateColorForCategory(category.id)
+  );
 
+  // Use absolute values for display but keep original values for tooltips
+  const absValues = spendingData.categories.map(cat => Math.abs(cat.total));
+  
   const chartData = {
     labels: spendingData.categories.map(cat => cat.name),
     datasets: [
       {
         label: 'Spending',
-        data: spendingData.categories.map(cat => cat.total), // Use actual values, not absolute values
+        data: absValues,
         backgroundColor: backgroundColors,
         borderColor: backgroundColors.map(color => color.replace('0.7', '1')),
         borderWidth: 1
       }
     ]
+  };
+
+  // Helper function to format currency
+  const formatCurrency = (value: number): string => {
+    return new Intl.NumberFormat('en-US', {
+      style: 'currency',
+      currency: 'EUR'
+    }).format(value);
   };
 
   const options: ChartOptions<'bar'> = {
@@ -140,39 +150,60 @@ const CategoryBarChart: React.FC<CategoryBarChartProps> = ({
         }
       },
       tooltip: {
-        callbacks: {
-          label: function(context) {
-            let label = context.dataset.label || '';
-            if (label) {
-              label += ': ';
-            }
-            if (context.parsed.x !== null) {
-              label += new Intl.NumberFormat('en-US', {
-                style: 'currency',
-                currency: 'EUR'
-              }).format(context.parsed.x);
-            }
-            return label;
-          }
-        }
+        // TypeScript-safe tooltip configuration
+        usePointStyle: true,
+        backgroundColor: 'rgba(0,0,0,0.8)',
       }
     },
     scales: {
       x: {
-        // Allow negative values to show properly
-        beginAtZero: false,
+        // Since we're using absolute values, always start at zero
+        beginAtZero: true,
         ticks: {
           callback: function(value) {
-            return new Intl.NumberFormat('en-US', {
-              style: 'currency',
-              currency: 'EUR',
-              maximumSignificantDigits: 3
-            }).format(value as number);
+            return formatCurrency(value as number);
           }
         }
       }
+    },
+    // Override default tooltip behavior to show our custom tooltip
+    // This avoids TypeScript errors with the callbacks
+    onHover: (event, elements) => {
+      // Custom hover behavior can be added here if needed
     }
   };
+
+  // Manually configure tooltip callbacks after render via plugin
+  // This avoids TypeScript errors with the complex tooltip configuration
+  ChartJS.register({
+    id: 'categoryBarTooltipPlugin',
+    beforeInit: (chart) => {
+      const originalTooltipLabelCallback = chart.options.plugins?.tooltip?.callbacks?.label;
+      
+      if (chart.options.plugins && chart.options.plugins.tooltip && chart.options.plugins.tooltip.callbacks) {
+        chart.options.plugins.tooltip.callbacks.label = function(context) {
+          const index = context.dataIndex;
+          const originalValue = spendingData.categories[index].total;
+          const formattedValue = formatCurrency(Math.abs(originalValue));
+          
+          let displayText = context.dataset.label || '';
+          if (displayText) {
+            displayText += ': ';
+          }
+          
+          displayText += formattedValue;
+          
+          if (originalValue > 0) {
+            displayText += ' (Income)';
+          } else if (originalValue < 0) {
+            displayText += ' (Expense)';
+          }
+          
+          return displayText;
+        };
+      }
+    }
+  });
 
   return (
     <Box sx={{ height: 400, p: 2 }}>
