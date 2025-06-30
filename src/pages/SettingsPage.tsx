@@ -129,15 +129,16 @@ export default function SettingsPage() {
 
   const fetchData = async () => {
     try {
+      // Force a fresh request by avoiding any caching issues
       const fetchedCategories = await CategoryService.getAllCategories();
       console.log("Fetched categories:", fetchedCategories);
-      setParentCategories(fetchedCategories);
+      setParentCategories([...fetchedCategories]); // Create a new array to ensure React detects the change
 
       // Fetch transaction similarity patterns
       try {
         const fetchedPatterns = await CategoryService.getAllPatterns();
         console.log("Fetched patterns:", fetchedPatterns);
-        setPatterns(fetchedPatterns);
+        setPatterns([...fetchedPatterns]); // Create a new array to ensure React detects the change
       } catch (error) {
         console.error('Failed to fetch patterns:', error);
         console.log('Response status:', (error as any).response?.status);
@@ -251,7 +252,7 @@ export default function SettingsPage() {
       // Creating new category
       setEditingCategory(null);
       setCategoryFormData({
-        name: '',
+        name: 'New Category',
         description: '',
         parent_id: parentId || null
       });
@@ -282,7 +283,7 @@ export default function SettingsPage() {
 
   const handleSubmitCategory = async () => {
     try {
-      console.log('Creating/updating category with data:', categoryFormData);
+      console.log('Creating/updating category with data:', JSON.stringify(categoryFormData));
       
       if (!categoryFormData.name.trim()) {
         setError('Category name is required.');
@@ -337,7 +338,7 @@ export default function SettingsPage() {
           // Create new category
           console.log('Creating new category');
           const result = await CategoryService.createCategory(categoryFormData);
-          console.log('Create category result:', result);
+          console.log('Create category result:', JSON.stringify(result));
           setSuccess(`Category "${categoryFormData.name}" created successfully.`);
         } catch (checkError) {
           console.error('Error checking for existing category:', checkError);

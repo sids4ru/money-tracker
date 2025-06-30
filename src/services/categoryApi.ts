@@ -341,13 +341,9 @@ export const CategoryService = {
    */
   async getAllPatterns(): Promise<TransactionSimilarityPattern[]> {
     try {
-      // Use the TransactionSimilarityPatternModel.getAll endpoint - no specific endpoint exists yet
-      // For now, return empty array to prevent errors
-      return [];
-      
-      // When backend endpoint is implemented, use this code:
-      // const response = await api.get('/categories/patterns');
-      // return response.data.data;
+      // Make API call to fetch patterns from backend
+      const response = await api.get('/categories/patterns');
+      return response.data.data;
     } catch (error) {
       console.error('Error fetching transaction patterns:', error);
       throw error;
