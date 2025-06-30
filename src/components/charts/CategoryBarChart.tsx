@@ -99,15 +99,24 @@ const CategoryBarChart: React.FC<CategoryBarChartProps> = ({
   ];
   const monthName = monthNames[month - 1];
 
-  // Use our shared utility function to generate colors
-  const generateColorForCategory = (id: number) => {
-    // Use the ID as a seed for consistent color generation
-    const hue = (id * 137.5) % 360; // Golden ratio to distribute colors nicely
-    return `hsla(${hue}, 70%, 60%, 0.7)`;
+  // Generate colors based on whether it's income or expense
+  const getColorForCategory = (category: {id: number, total: number}) => {
+    // Use red shades for expenses, green shades for income
+    if (category.total >= 0) {
+      // Income - green shades
+      const baseHue = 120; // Green
+      const hueVariation = (category.id * 20) % 60; // Variations within green
+      return `hsla(${baseHue + hueVariation}, 70%, 45%, 0.7)`;
+    } else {
+      // Expense - red shades
+      const baseHue = 0; // Red
+      const hueVariation = (category.id * 20) % 60; // Variations within red
+      return `hsla(${baseHue + hueVariation}, 70%, 50%, 0.7)`;
+    }
   };
 
   const backgroundColors = spendingData.categories.map(category => 
-    generateColorForCategory(category.id)
+    getColorForCategory(category)
   );
 
   // Use absolute values for display but keep original values for tooltips
@@ -144,7 +153,7 @@ const CategoryBarChart: React.FC<CategoryBarChartProps> = ({
       },
       title: {
         display: true,
-        text: `${parentName} Spending Breakdown - ${monthName} ${year}`,
+        text: `${parentName} Category Breakdown - ${monthName} ${year}`,
         font: {
           size: 16
         }
@@ -184,20 +193,15 @@ const CategoryBarChart: React.FC<CategoryBarChartProps> = ({
         chart.options.plugins.tooltip.callbacks.label = function(context) {
           const index = context.dataIndex;
           const originalValue = spendingData.categories[index].total;
-          const formattedValue = formatCurrency(Math.abs(originalValue));
+          const absValue = Math.abs(originalValue);
+          const formattedValue = formatCurrency(absValue);
           
-          let displayText = context.dataset.label || '';
-          if (displayText) {
-            displayText += ': ';
-          }
+          const categoryName = spendingData.categories[index].name;
+          const typeLabel = originalValue > 0 ? 'Income' : 'Expense';
           
-          displayText += formattedValue;
-          
-          if (originalValue > 0) {
-            displayText += ' (Income)';
-          } else if (originalValue < 0) {
-            displayText += ' (Expense)';
-          }
+          // Create a more descriptive tooltip
+          let displayText = `${categoryName}: ${formattedValue}`;
+          displayText += ` (${typeLabel})`;
           
           return displayText;
         };

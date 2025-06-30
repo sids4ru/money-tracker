@@ -174,75 +174,70 @@ export const getSpendingByCategoryForMonth = async (req: Request, res: Response)
     // Add debug info
     console.log(`Fetching category spending data for parent: ${parentCategoryId}, month: ${month}, year: ${year}`);
     
-    // SQL query to get category spending for a specific month and parent category
-    // Note: transaction_date is in DD/MM/YYYY format, so we need to extract month and year differently
+    // Use a CTE (Common Table Expression) to handle both cases in a single query
     const categorySpendingData = await query<{
       id: number;
       name: string;
       total: number;
     }>(`
-      SELECT 
-        c.id,
-        c.name,
-        SUM(
+      WITH CategoryTransactions AS (
+        -- Get transactions from transaction_categories
+        SELECT 
+          c.id,
+          c.name,
           CASE
             WHEN t.debit_amount IS NOT NULL THEN -CAST(REPLACE(t.debit_amount, ',', '') AS REAL)
             WHEN t.credit_amount IS NOT NULL THEN CAST(REPLACE(t.credit_amount, ',', '') AS REAL)
             ELSE 0
-          END
-        ) AS total
-      FROM 
-        transaction_categories tc
-      JOIN 
-        transactions t ON tc.transaction_id = t.id
-      JOIN 
-        categories c ON tc.category_id = c.id
-      WHERE 
-        tc.parent_category_id = ?
-        AND substr(t.transaction_date, 7, 4) = ? AND substr(t.transaction_date, 4, 2) = ?
-      GROUP BY 
-        c.id, c.name
-      ORDER BY 
-        ABS(total) DESC
-    `, [parentCategoryId, year.toString(), monthFormatted]);
-    
-    console.log(`Category spending data from transaction_categories: ${JSON.stringify(categorySpendingData)}`);
-    
-    // Now handle transactions with category_id directly set on the transaction
-    // Note: transaction_date is in DD/MM/YYYY format, so we need to extract month and year differently
-    const directCategorySpending = await query<{
-      id: number;
-      name: string;
-      total: number;
-    }>(`
-      SELECT 
-        c.id,
-        c.name,
-        SUM(
+          END AS amount
+        FROM 
+          categories c
+        JOIN 
+          transaction_categories tc ON c.id = tc.category_id
+        JOIN 
+          transactions t ON tc.transaction_id = t.id
+        WHERE 
+          tc.parent_category_id = ?
+          AND substr(t.transaction_date, 7, 4) = ? AND substr(t.transaction_date, 4, 2) = ?
+        
+        UNION ALL
+        
+        -- Get transactions with direct category_id
+        SELECT 
+          c.id,
+          c.name,
           CASE
             WHEN t.debit_amount IS NOT NULL THEN -CAST(REPLACE(t.debit_amount, ',', '') AS REAL)
             WHEN t.credit_amount IS NOT NULL THEN CAST(REPLACE(t.credit_amount, ',', '') AS REAL)
             ELSE 0
-          END
-        ) AS total
+          END AS amount
+        FROM 
+          categories c
+        JOIN 
+          transactions t ON c.id = t.category_id
+        WHERE 
+          c.parent_id = ?
+          AND substr(t.transaction_date, 7, 4) = ? AND substr(t.transaction_date, 4, 2) = ?
+          AND t.category_id IS NOT NULL
+      )
+      
+      -- Sum up the amounts by category
+      SELECT 
+        id,
+        name,
+        SUM(amount) AS total
       FROM 
-        transactions t
-      JOIN 
-        categories c ON t.category_id = c.id
-      WHERE 
-        c.parent_id = ?
-        AND substr(t.transaction_date, 7, 4) = ? AND substr(t.transaction_date, 4, 2) = ?
-        AND t.category_id IS NOT NULL
+        CategoryTransactions
       GROUP BY 
-        c.id, c.name
+        id, name
       ORDER BY 
-        ABS(total) DESC
-    `, [parentCategoryId, year.toString(), monthFormatted]);
+        ABS(SUM(amount)) DESC;
+    `, [parentCategoryId, year.toString(), monthFormatted, parentCategoryId, year.toString(), monthFormatted]);
     
-    console.log(`Category spending data from direct category_id: ${JSON.stringify(directCategorySpending)}`);
+    console.log(`Category spending data from combined query: ${JSON.stringify(categorySpendingData)}`);
     
     // Return empty data if no transactions are found - don't generate random data
-    if (categorySpendingData.length === 0 && directCategorySpending.length === 0) {
+    if (categorySpendingData.length === 0) {
       console.log(`No category spending data found for parent: ${parentCategoryId}, month: ${month}, year: ${year}`);
       
       res.json({
@@ -257,30 +252,12 @@ export const getSpendingByCategoryForMonth = async (req: Request, res: Response)
       return;
     }
     
-    // Merge the two result sets
-    const mergedCategorySpending = [...categorySpendingData];
-    
-    for (const spending of directCategorySpending) {
-      const existingIndex = mergedCategorySpending.findIndex(item => item.id === spending.id);
-      
-      if (existingIndex !== -1) {
-        // Add to existing data
-        mergedCategorySpending[existingIndex].total += spending.total;
-      } else {
-        // Add new data point
-        mergedCategorySpending.push(spending);
-      }
-    }
-    
-    // Re-sort after merging
-    mergedCategorySpending.sort((a, b) => Math.abs(b.total) - Math.abs(a.total));
-    
     // Format the result
     const result = {
       parentId: parentCategoryId,
       month,
       year,
-      categories: mergedCategorySpending
+      categories: categorySpendingData
     };
     
     res.json({
