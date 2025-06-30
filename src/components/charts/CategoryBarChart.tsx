@@ -192,6 +192,12 @@ const CategoryBarChart: React.FC<CategoryBarChartProps> = ({
       if (chart.options.plugins && chart.options.plugins.tooltip && chart.options.plugins.tooltip.callbacks) {
         chart.options.plugins.tooltip.callbacks.label = function(context) {
           const index = context.dataIndex;
+          
+          // Add safety check to prevent errors when the index doesn't exist in the data
+          if (!spendingData || !spendingData.categories || !spendingData.categories[index]) {
+            return 'No data available';
+          }
+          
           const originalValue = spendingData.categories[index].total;
           const absValue = Math.abs(originalValue);
           const formattedValue = formatCurrency(absValue);
