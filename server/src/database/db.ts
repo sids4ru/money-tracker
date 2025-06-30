@@ -11,7 +11,7 @@ if (!fs.existsSync(DATA_DIR)) {
 // Define the database file path
 const DB_PATH = path.join(DATA_DIR, 'finance_tracker.db');
 
-// Create a new database connection
+// Create a new database connection with better durability options
 const db = new sqlite3.Database(DB_PATH, (err) => {
   if (err) {
     console.error('Error opening database:', err.message);
@@ -20,8 +20,10 @@ const db = new sqlite3.Database(DB_PATH, (err) => {
   console.log(`Connected to SQLite database at ${DB_PATH}`);
 });
 
-// Enable foreign keys support
+// Enable foreign keys support and maximize durability settings
 db.exec('PRAGMA foreign_keys = ON;');
+db.exec('PRAGMA journal_mode = DELETE;'); // Use DELETE mode for maximum reliability
+db.exec('PRAGMA synchronous = FULL;'); // Maximum durability - data is synced after each transaction
 
 // Initialize the database schema
 const initializeDatabase = (): Promise<void> => {
@@ -243,31 +245,68 @@ const get = <T = any>(sql: string, params: any = []): Promise<T | undefined> => 
   });
 };
 
-// Execute a query that doesn't return data
+// Execute a query that doesn't return data with explicit transaction handling for important operations
 const run = (sql: string, params: any = []): Promise<{ lastID: number; changes: number }> => {
   return new Promise((resolve, reject) => {
-    db.run(sql, params, function(this: any, err) {
-      if (err) {
-        console.error('Database run error:', err.message);
-        reject(err);
-        return;
-      }
-      resolve({ lastID: this.lastID, changes: this.changes });
-    });
+    // Use explicit transaction for data modification operations for better reliability
+    const isModification = /^(INSERT|UPDATE|DELETE|CREATE|DROP|ALTER)/i.test(sql.trim());
+    
+    if (isModification) {
+      db.serialize(() => {
+        db.run('BEGIN IMMEDIATE TRANSACTION');
+        
+        db.run(sql, params, function(this: any, err) {
+          if (err) {
+            db.run('ROLLBACK', () => {
+              console.error('Database run error (transaction rolled back):', err.message);
+              reject(err);
+            });
+            return;
+          }
+          
+          db.run('COMMIT', (commitErr) => {
+            if (commitErr) {
+              console.error('Error committing transaction:', commitErr.message);
+              reject(commitErr);
+              return;
+            }
+            resolve({ lastID: this.lastID, changes: this.changes });
+          });
+        });
+      });
+    } else {
+      // For non-modification queries (SELECT, etc.), use the standard approach
+      db.run(sql, params, function(this: any, err) {
+        if (err) {
+          console.error('Database run error:', err.message);
+          reject(err);
+          return;
+        }
+        resolve({ lastID: this.lastID, changes: this.changes });
+      });
+    }
   });
 };
 
-// Close the database connection
+// Close the database connection and ensure pending writes are committed
 const closeDatabase = (): Promise<void> => {
   return new Promise((resolve, reject) => {
-    db.close((err) => {
-      if (err) {
-        console.error('Error closing database:', err.message);
-        reject(err);
-        return;
+    // Optimize database before closing
+    db.exec('PRAGMA optimize;', (optimizeErr) => {
+      if (optimizeErr) {
+        console.warn('Warning: Could not optimize database before closing:', optimizeErr.message);
       }
-      console.log('Database connection closed');
-      resolve();
+      
+      // Now close the connection
+      db.close((err) => {
+        if (err) {
+          console.error('Error closing database:', err.message);
+          reject(err);
+          return;
+        }
+        console.log('Database connection closed');
+        resolve();
+      });
     });
   });
 };

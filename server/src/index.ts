@@ -8,7 +8,6 @@ import dotenv from 'dotenv';
 
 // Import database initialization
 import { initializeDatabase } from './database/db';
-import { runMigrations } from './database/migrations/runMigrations';
 
 // Import routes
 import transactionRoutes from './routes/transactionRoutes';
@@ -62,19 +61,57 @@ async function startServer() {
     // Initialize SQLite database
     await initializeDatabase();
     
-    // Run database migrations
-    await runMigrations();
-    
     // Start express server
-    app.listen(PORT, () => {
+    const server = app.listen(PORT, () => {
       console.log(`Server running on port ${PORT}`);
       console.log(`Health check at http://localhost:${PORT}/health`);
       console.log(`API endpoints available at http://localhost:${PORT}/api`);
     });
+    
+    // Handle graceful shutdown
+    setupGracefulShutdown(server);
+    
   } catch (error) {
     console.error('Failed to start server:', error);
     process.exit(1);
   }
+}
+
+// Setup graceful shutdown to ensure database operations are completed
+function setupGracefulShutdown(server: any) {
+  // Import closeDatabase from db.ts
+  const { closeDatabase } = require('./database/db');
+  
+  async function shutdown(signal: string) {
+    console.log(`\n${signal} received. Starting graceful shutdown...`);
+    
+    // First close the HTTP server (stop accepting new connections)
+    server.close(() => {
+      console.log('HTTP server closed.');
+      
+      // Then close the database connection
+      closeDatabase()
+        .then(() => {
+          console.log('Database connection properly closed.');
+          console.log('Graceful shutdown completed.');
+          process.exit(0);
+        })
+        .catch((err: Error) => {
+          console.error('Error during database shutdown:', err);
+          process.exit(1);
+        });
+    });
+    
+    // Force close after 10 seconds if graceful shutdown fails
+    setTimeout(() => {
+      console.error('Forcing shutdown after timeout');
+      process.exit(1);
+    }, 10000);
+  }
+  
+  // Listen for termination signals
+  process.on('SIGTERM', () => shutdown('SIGTERM'));
+  process.on('SIGINT', () => shutdown('SIGINT'));
 }
 
 // Run the server
