@@ -59,7 +59,7 @@ function App() {
             <Toolbar>
               <AccountBalanceIcon sx={{ mr: 2 }} />
               <Typography variant="h6" component="div" sx={{ flexGrow: 1 }}>
-                Finance Tracker
+                Money Trackers
               </Typography>
             </Toolbar>
             <Box sx={{ px: 2, pb: 1 }}>
