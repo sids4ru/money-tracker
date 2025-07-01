@@ -187,10 +187,9 @@ const CategoryBarChart: React.FC<CategoryBarChartProps> = ({
   ChartJS.register({
     id: 'categoryBarTooltipPlugin',
     beforeInit: (chart) => {
-      const originalTooltipLabelCallback = chart.options.plugins?.tooltip?.callbacks?.label;
-      
       if (chart.options.plugins && chart.options.plugins.tooltip && chart.options.plugins.tooltip.callbacks) {
         chart.options.plugins.tooltip.callbacks.label = function(context) {
+          // Get the index of the hovered bar
           const index = context.dataIndex;
           
           // Add safety check to prevent errors when the index doesn't exist in the data
@@ -198,18 +197,18 @@ const CategoryBarChart: React.FC<CategoryBarChartProps> = ({
             return 'No data available';
           }
           
-          const originalValue = spendingData.categories[index].total;
+          // Get the actual category object from our data source
+          const category = spendingData.categories[index];
+          const originalValue = category.total;
           const absValue = Math.abs(originalValue);
           const formattedValue = formatCurrency(absValue);
           
-          const categoryName = spendingData.categories[index].name;
+          // Use the category name from our data
+          const categoryName = category.name;
           const typeLabel = originalValue > 0 ? 'Income' : 'Expense';
           
           // Create a more descriptive tooltip
-          let displayText = `${categoryName}: ${formattedValue}`;
-          displayText += ` (${typeLabel})`;
-          
-          return displayText;
+          return `${categoryName}: ${formattedValue} (${typeLabel})`;
         };
       }
     }

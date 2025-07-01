@@ -31,6 +31,8 @@ erDiagram
         text local_currency_amount
         text local_currency
         text grouping_status "manual/auto/none/null"
+        int category_id FK "References categories (not in diagram)"
+        int transaction_category_id FK "References transaction_categories.id"
         text created_at "NOT NULL DEFAULT now"
     }
     
@@ -69,7 +71,8 @@ erDiagram
         int usage_count "DEFAULT 0"
     }
     
-    transactions ||--o| transaction_categories : "has one category assignment via transaction_id"
+    transactions ||--o| transaction_categories : "has one category assignment via transaction_category_id"
+    transactions ||--o| categories : "has one direct category via category_id"
     transaction_categories }o--|| categories : "references via category_id"
     transaction_categories }o--|| parent_categories : "references via parent_category_id"
     parent_categories ||--o{ categories : "parent of via parent_id"
