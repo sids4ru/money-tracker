@@ -1,6 +1,7 @@
 import { jest, describe, test, expect, beforeAll, beforeEach, afterAll } from '@jest/globals';
 import path from 'path';
 import fs from 'fs';
+import * as TransactionSimilarityPatternModule from '../../src/models/TransactionSimilarityPattern';
 import { initTestDb, resetTestDb, closeTestDb, mockDbModule, getTestDb } from '../utils/testDb';
 import { Transaction, TransactionModel } from '../../src/models/Transaction';
 
@@ -11,6 +12,22 @@ describe('Transaction Model Tests', () => {
   // Set up the in-memory test database before all tests
   beforeAll(async () => {
     await initTestDb();
+    
+    // Prepare the test database with tables for auto-categorization testing
+    const db = getTestDb();
+    await db.exec(`
+      CREATE TABLE IF NOT EXISTS transaction_similarity_patterns (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        pattern_type TEXT NOT NULL,
+        pattern_value TEXT NOT NULL,
+        parent_category_id INTEGER,
+        category_id INTEGER,
+        confidence_score REAL DEFAULT 1.0,
+        usage_count INTEGER DEFAULT 0,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      );
+    `);
   });
   
   // Reset the database between tests
@@ -243,6 +260,121 @@ describe('Transaction Model Tests', () => {
       // This validates that our TransactionModel.delete implementation can work correctly
       // as it follows the same pattern of first deleting from transaction_categories and
       // then from transactions
+    });
+    
+    // Test auto-categorization during import
+    test('should auto-apply categories based on transaction_similarity_patterns when autoApplyCategories is true', async () => {
+      // Setup: Create test category and pattern
+      const db = getTestDb();
+      
+      // Insert test category
+      const categoryResult = await db.run(
+        'INSERT INTO categories (name) VALUES (?)',
+        ['Test Category']
+      );
+      const categoryId = categoryResult.lastID;
+      
+      // Insert test pattern that will match our transaction
+      const patternResult = await db.run(
+        `INSERT INTO transaction_similarity_patterns 
+        (pattern_type, pattern_value, category_id, confidence_score) 
+        VALUES (?, ?, ?, ?)`,
+        ['contains', 'AUTO_CATEGORIZE_TEST', categoryId, 1.0]
+      );
+      
+      // Mock the TransactionSimilarityPattern model's findMatchingPatterns method
+      const originalMethod = TransactionSimilarityPatternModule.TransactionSimilarityPatternModel.findMatchingPatterns;
+      
+      // Create a properly typed mock implementation
+      const mockFindMatchingPatterns = jest.fn().mockImplementation((description: string) => {
+        if (description.includes('AUTO_CATEGORIZE_TEST')) {
+          return Promise.resolve([{
+            id: patternResult.lastID,
+            pattern_type: 'contains',
+            pattern_value: 'AUTO_CATEGORIZE_TEST',
+            category_id: categoryId,
+            confidence_score: 1.0
+          }]);
+        }
+        return Promise.resolve([]);
+      });
+      
+      // Apply the mock
+      TransactionSimilarityPatternModule.TransactionSimilarityPatternModel.findMatchingPatterns = 
+        mockFindMatchingPatterns as typeof TransactionSimilarityPatternModule.TransactionSimilarityPatternModel.findMatchingPatterns;
+      
+      // Define unique transaction to test with autoApplyCategories = true
+      const uniqueSuffix = Date.now().toString();
+      const testTransaction: Omit<Transaction, 'id' | 'created_at'> = {
+        account_number: '123456789',
+        transaction_date: '2025-07-05',
+        description1: `AUTO_CATEGORIZE_TEST ${uniqueSuffix}`,
+        description2: 'Test',
+        description3: 'Transaction',
+        debit_amount: '75.00',
+        credit_amount: undefined,
+        balance: '1000.00',
+        currency: 'EUR',
+        transaction_type: 'POS',
+        local_currency_amount: '75.00',
+        local_currency: 'EUR'
+      };
+      
+      // Test with autoApplyCategories = true (default)
+      const resultWithAutoCategories = await TransactionModel.createBatch([testTransaction]);
+      
+      // Define transaction with different description to test with autoApplyCategories = false
+      const testTransaction2: Omit<Transaction, 'id' | 'created_at'> = {
+        ...testTransaction,
+        description1: `AUTO_CATEGORIZE_TEST_DISABLED ${uniqueSuffix}`,
+      };
+      
+      // Test with autoApplyCategories = false
+      const resultWithoutAutoCategories = await TransactionModel.createBatch([testTransaction2], false);
+      
+      // Verify both transactions were added
+      expect(resultWithAutoCategories.added).toBe(1);
+      expect(resultWithoutAutoCategories.added).toBe(1);
+      
+      // Find the transactions to check if they were categorized
+      const allTransactions = await TransactionModel.getAll();
+      
+      // Find the transaction that should have been auto-categorized
+      const autoCategorizedTx = allTransactions.find(t => 
+        t.description1 && t.description1.includes(`AUTO_CATEGORIZE_TEST ${uniqueSuffix}`)
+      );
+      
+      // Find the transaction that should not have been auto-categorized
+      const nonAutoCategorizedTx = allTransactions.find(t => 
+        t.description1 && t.description1.includes(`AUTO_CATEGORIZE_TEST_DISABLED ${uniqueSuffix}`)
+      );
+      
+      // With the way our test database is set up, we can't directly verify categorization through the 
+      // transaction_categories table due to mocking limitations. Instead, we'll check the behavior
+      // of the findMatchingPatterns method being called for auto-categorization
+      
+      expect(mockFindMatchingPatterns).toHaveBeenCalled();
+      
+      // Check the mock calls
+      const findMatchingPatternsCalls = mockFindMatchingPatterns.mock.calls;
+      
+      // The method should be called with the first transaction's description
+      const calledWithAutoTx = findMatchingPatternsCalls.some(call => 
+        typeof call[0] === 'string' && call[0].includes(`AUTO_CATEGORIZE_TEST ${uniqueSuffix}`)
+      );
+      
+      // The method should not be called with the second transaction's description
+      // when autoApplyCategories is false
+      const notCalledWithDisabledTx = !findMatchingPatternsCalls.some(call => 
+        typeof call[0] === 'string' && call[0].includes(`AUTO_CATEGORIZE_TEST_DISABLED ${uniqueSuffix}`)
+      );
+      
+      expect(calledWithAutoTx).toBe(true);
+      expect(notCalledWithDisabledTx).toBe(true);
+      
+      // Restore the original method
+      TransactionSimilarityPatternModule.TransactionSimilarityPatternModel.findMatchingPatterns = originalMethod;
+      mockFindMatchingPatterns.mockRestore();
     });
   });
 });

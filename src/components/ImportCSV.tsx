@@ -6,7 +6,9 @@ import {
   Paper, 
   CircularProgress, 
   Alert, 
-  Snackbar 
+  Snackbar,
+  FormControlLabel,
+  Checkbox
 } from '@mui/material';
 import UploadFileIcon from '@mui/icons-material/UploadFile';
 import { TransactionService } from '../services/api';
@@ -20,6 +22,7 @@ const ImportCSV: React.FC<ImportCSVProps> = ({ onImportComplete }) => {
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const [isDragging, setIsDragging] = useState(false);
+  const [autoApplyCategories, setAutoApplyCategories] = useState(true);
   
   const handleFileChange = async (file: File) => {
     if (!file) return;
@@ -34,8 +37,8 @@ const ImportCSV: React.FC<ImportCSVProps> = ({ onImportComplete }) => {
     setError(null);
     
     try {
-      // Import the CSV file directly through the API
-      const result = await TransactionService.importFromCSV(file);
+      // Import the CSV file directly through the API with auto-categorization flag
+      const result = await TransactionService.importFromCSV(file, autoApplyCategories);
       
       // Show success message
       setSuccess(`Successfully imported ${result.added} transactions. ${result.duplicates} duplicates were skipped.`);
@@ -99,6 +102,18 @@ const ImportCSV: React.FC<ImportCSVProps> = ({ onImportComplete }) => {
         onDrop={handleDrop}
         onClick={() => document.getElementById('file-input')?.click()}
       >
+        <FormControlLabel
+          control={
+            <Checkbox
+              checked={autoApplyCategories}
+              onChange={(e) => setAutoApplyCategories(e.target.checked)}
+              onClick={(e) => e.stopPropagation()} // Prevent triggering file upload dialog
+              color="primary"
+            />
+          }
+          label="Auto-apply categories to imported transactions"
+          sx={{ mb: 2 }}
+        />
         <input
           type="file"
           id="file-input"
