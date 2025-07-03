@@ -1,0 +1,4 @@
+Posted Account,Posted Transactions Date,Description1,Description2,Description3,Debit Amount,Credit Amount,Balance,Posted Currency,Transaction Type,Local Currency Amount,Local Currency
+123456789,2025-07-10,UNIQUE TRANSACTION 1,Test,Unique,125.50,,774.50,EUR,POS,125.50,EUR
+123456789,2025-07-11,UNIQUE TRANSACTION 2,Test,Unique,,300.75,1075.25,EUR,CREDIT,300.75,EUR
+123456789,2025-07-12,UNIQUE TRANSACTION 3,Another,Unique,85.25,,990.00,EUR,POS,85.25,EUR

@@ -16,13 +16,21 @@ import {
   LinearProgress,
   Chip,
   IconButton,
-  Tooltip
+  Tooltip,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogContentText,
+  DialogActions,
+  Button
 } from '@mui/material';
 import SearchIcon from '@mui/icons-material/Search';
 import CategoryIcon from '@mui/icons-material/Category';
+import DeleteIcon from '@mui/icons-material/Delete';
 import { Transaction, CategoryInfo } from '../types/Transaction';
 import CategoryAssignmentDialog from './CategoryAssignmentDialog';
 import { CategoryService } from '../services/categoryApi';
+import { TransactionService } from '../services/api';
 
 type Order = 'asc' | 'desc';
 
@@ -69,7 +77,7 @@ const columns: TableColumn[] = [
   {
     id: 'actions',
     label: 'Actions',
-    minWidth: 80,
+    minWidth: 120,
     align: 'center'
   }
 ];
@@ -88,6 +96,7 @@ const TransactionList: React.FC<TransactionListProps> = ({ transactions, isLoadi
   const [searchQuery, setSearchQuery] = useState('');
   const [filteredTransactions, setFilteredTransactions] = useState<Transaction[]>([]);
   const [categoryDialogOpen, setCategoryDialogOpen] = useState(false);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [selectedTransaction, setSelectedTransaction] = useState<Transaction | null>(null);
   const [transactionCategories, setTransactionCategories] = useState<{[key: string]: string[]}>({});
   const [categoryCache, setCategoryCache] = useState<{[key: string]: CategoryInfo}>({});
@@ -252,6 +261,35 @@ const TransactionList: React.FC<TransactionListProps> = ({ transactions, isLoadi
   const handleCloseCategoryDialog = () => {
     setCategoryDialogOpen(false);
     setSelectedTransaction(null);
+  };
+  
+  const handleOpenDeleteDialog = (transaction: Transaction) => {
+    setSelectedTransaction(transaction);
+    setDeleteDialogOpen(true);
+  };
+  
+  const handleCloseDeleteDialog = () => {
+    setDeleteDialogOpen(false);
+    setSelectedTransaction(null);
+  };
+  
+  const handleDeleteTransaction = async () => {
+    if (!selectedTransaction || !selectedTransaction.id) return;
+    
+    try {
+      await TransactionService.deleteTransaction(selectedTransaction.id);
+      
+      // Close the dialog
+      setDeleteDialogOpen(false);
+      setSelectedTransaction(null);
+      
+      // Trigger data refresh
+      if (onUpdate) {
+        onUpdate();
+      }
+    } catch (error) {
+      console.error('Error deleting transaction:', error);
+    }
   };
   
   const handleAssignCategory = async (transactionId: number, categoryId: number, applyToSimilar: boolean) => {
@@ -435,18 +473,35 @@ const TransactionList: React.FC<TransactionListProps> = ({ transactions, isLoadi
                           )}
                         </TableCell>
                         <TableCell align="center">
-                          <Tooltip title="Assign to Category">
-                            <IconButton 
-                              size="small" 
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                handleOpenCategoryDialog(transaction);
-                              }}
-                              color="primary"
-                            >
-                              <CategoryIcon fontSize="small" />
-                            </IconButton>
-                          </Tooltip>
+                          <Box sx={{ display: 'flex', justifyContent: 'center', gap: 1 }}>
+                            <Tooltip title="Assign to Category">
+                              <IconButton 
+                                size="small" 
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleOpenCategoryDialog(transaction);
+                                }}
+                                color="primary"
+                                sx={{ mx: 0.5 }}
+                              >
+                                <CategoryIcon fontSize="small" />
+                              </IconButton>
+                            </Tooltip>
+                            
+                            <Tooltip title="Delete Transaction">
+                              <IconButton 
+                                size="small" 
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleOpenDeleteDialog(transaction);
+                                }}
+                                color="error"
+                                sx={{ mx: 0.5 }}
+                              >
+                                <DeleteIcon fontSize="small" />
+                              </IconButton>
+                            </Tooltip>
+                          </Box>
                         </TableCell>
                       </TableRow>
                     );
@@ -472,6 +527,47 @@ const TransactionList: React.FC<TransactionListProps> = ({ transactions, isLoadi
         onClose={handleCloseCategoryDialog}
         onAssign={handleAssignCategory}
       />
+      
+      {/* Delete Confirmation Dialog */}
+      <Dialog
+        open={deleteDialogOpen}
+        onClose={handleCloseDeleteDialog}
+        aria-labelledby="delete-dialog-title"
+        aria-describedby="delete-dialog-description"
+      >
+        <DialogTitle id="delete-dialog-title">
+          Confirm Delete Transaction
+        </DialogTitle>
+        <DialogContent>
+          <DialogContentText id="delete-dialog-description">
+            Are you sure you want to delete this transaction? This action will remove the transaction 
+            and all of its category assignments. This action cannot be undone.
+          </DialogContentText>
+          {selectedTransaction && (
+            <Box sx={{ mt: 2 }}>
+              <Typography variant="subtitle2">Transaction Details:</Typography>
+              <Typography variant="body2">Date: {selectedTransaction.date}</Typography>
+              <Typography variant="body2">Description: {selectedTransaction.description}</Typography>
+              <Typography variant="body2" sx={{ 
+                color: getTransactionAmount(selectedTransaction) < 0 ? 'error.main' : 'success.main'
+              }}>
+                Amount: {getTransactionAmount(selectedTransaction) < 0
+                  ? `-€${Math.abs(getTransactionAmount(selectedTransaction)).toFixed(2)}`
+                  : `€${getTransactionAmount(selectedTransaction).toFixed(2)}`
+                }
+              </Typography>
+            </Box>
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={handleCloseDeleteDialog} color="primary">
+            Cancel
+          </Button>
+          <Button onClick={handleDeleteTransaction} color="error" variant="contained">
+            Delete
+          </Button>
+        </DialogActions>
+      </Dialog>
     </Paper>
   );
 };

@@ -1,0 +1,4 @@
+Posted Account,Posted Transactions Date,Description1,Description2,Description3,Debit Amount,Credit Amount,Balance,Posted Currency,Transaction Type,Local Currency Amount,Local Currency
+123456789,2025-07-01,DUMMY TRANSACTION 1,Test,Transaction,100.00,,900.00,EUR,POS,100.00,EUR
+123456789,2025-07-02,DUMMY TRANSACTION 2,Test,Transaction,,200.00,1100.00,EUR,CREDIT,200.00,EUR
+123456789,2025-07-03,DUMMY,Another,Test,50.00,,1050.00,EUR,POS,50.00,EUR

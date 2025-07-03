@@ -97,8 +97,8 @@ export class TransactionModel {
       `INSERT INTO transactions (
         account_number, transaction_date, description1, description2, description3,
         debit_amount, credit_amount, balance, currency, transaction_type,
-        local_currency_amount, local_currency
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        local_currency_amount, local_currency, transaction_category_id
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         transaction.account_number,
         transaction.transaction_date,
@@ -111,11 +111,26 @@ export class TransactionModel {
         transaction.currency,
         transaction.transaction_type,
         transaction.local_currency_amount || null,
-        transaction.local_currency || null
+        transaction.local_currency || null,
+        transaction.transaction_category_id || null
       ]
     );
 
-    return result.lastID;
+    const newTransactionId = result.lastID;
+    
+    // Try to assign a category based on pattern matching if not already categorized
+    try {
+      const transactionDescription = transaction.description1 || '';
+      if (transactionDescription && !transaction.category_id && !transaction.transaction_category_id) {
+        console.log(`Attempting to auto-categorize new transaction: "${transactionDescription}"`);
+        await this.attemptAutoCategorization(newTransactionId, transactionDescription);
+      }
+    } catch (error) {
+      console.error(`Error during auto-categorization for transaction ${newTransactionId}:`, error);
+      // Don't throw - just log the error and continue
+    }
+
+    return newTransactionId;
   }
 
   /**
@@ -134,14 +149,75 @@ export class TransactionModel {
           continue;
         }
 
-        await this.create(transaction);
-        added++;
+        const newId = await this.create(transaction);
+        if (newId) {
+          added++;
+          console.log(`Successfully added transaction ${newId}: ${transaction.description1}`);
+        }
       } catch (error) {
         console.error('Error adding transaction:', error);
       }
     }
 
     return { added, duplicates };
+  }
+  
+  /**
+   * Attempt to automatically categorize a transaction based on its description
+   * by checking against transaction similarity patterns
+   */
+  static async attemptAutoCategorization(transactionId: number, description: string): Promise<boolean> {
+    try {
+      // Import TransactionSimilarityPatternModel here to avoid circular dependency
+      const { TransactionSimilarityPatternModel } = require('./TransactionSimilarityPattern');
+      const { TransactionCategoryModel } = require('./Category');
+      
+      // Find matching patterns
+      const matchingPatterns = await TransactionSimilarityPatternModel.findMatchingPatterns(description);
+      console.log(`Found ${matchingPatterns.length} matching patterns for "${description}"`);
+      
+      if (matchingPatterns.length > 0) {
+        // Sort by confidence score (highest first)
+        matchingPatterns.sort((a: any, b: any) => (b.confidence_score || 1) - (a.confidence_score || 1));
+        const bestMatch = matchingPatterns[0];
+        
+        // Either use category_id directly or get a category from the parent_category_id
+        let categoryId = bestMatch.category_id;
+        
+        if (!categoryId && bestMatch.parent_category_id) {
+          // Get a default/first category from the parent category
+          const { CategoryModel } = require('./Category');
+          const categories = await CategoryModel.getCategoriesByParentId(bestMatch.parent_category_id);
+          if (categories.length > 0) {
+            categoryId = categories[0].id;
+            console.log(`Using category ${categoryId} from parent category ${bestMatch.parent_category_id}`);
+          }
+        }
+        
+        if (categoryId) {
+          console.log(`Auto-assigning category ${categoryId} to transaction ${transactionId}`);
+          
+          // Create entry in transaction_categories
+          const assignmentId = await TransactionCategoryModel.assignCategory(transactionId, categoryId);
+          
+          // Update the transaction record with the category assignment info
+          await this.update(transactionId, {
+            transaction_category_id: assignmentId,
+            grouping_status: 'auto'
+          });
+          
+          // Increment the pattern usage count
+          await TransactionSimilarityPatternModel.incrementUsageCount(bestMatch.id!);
+          
+          return true;
+        }
+      }
+      
+      return false;
+    } catch (error) {
+      console.error(`Error in attemptAutoCategorization for transaction ${transactionId}:`, error);
+      return false;
+    }
   }
 
   /**
@@ -154,10 +230,9 @@ export class TransactionModel {
 
     // Add each field that exists in the transaction object
     Object.entries(transaction).forEach(([key, value]) => {
-      // Skip id, created_at, and transaction_category_id fields
-      // transaction_category_id should not be directly set in transactions table,
-      // as it's handled by the transaction_categories table
-      if (key !== 'id' && key !== 'created_at' && key !== 'transaction_category_id') {
+      // Skip id and created_at fields
+      // Note: Allow transaction_category_id to be set directly for compatibility with the updated ER diagram
+      if (key !== 'id' && key !== 'created_at') {
         fields.push(`${key} = ?`);
         values.push(value);
       }
@@ -181,10 +256,29 @@ export class TransactionModel {
 
   /**
    * Delete a transaction by ID
+   * Also removes related records from transaction_categories table
    */
   static async delete(id: number): Promise<boolean> {
-    const result = await run('DELETE FROM transactions WHERE id = ?', [id]);
-    return result.changes > 0;
+    try {
+      // Start a transaction to ensure atomicity
+      await run('BEGIN TRANSACTION');
+      
+      // First delete related records from transaction_categories
+      await run('DELETE FROM transaction_categories WHERE transaction_id = ?', [id]);
+      
+      // Then delete the transaction itself
+      const result = await run('DELETE FROM transactions WHERE id = ?', [id]);
+      
+      // Commit the transaction
+      await run('COMMIT');
+      
+      return result.changes > 0;
+    } catch (error) {
+      // Rollback in case of error
+      await run('ROLLBACK');
+      console.error(`Error deleting transaction ${id}:`, error);
+      throw error;
+    }
   }
 
   /**

@@ -291,8 +291,15 @@ export const importTransactionsFromCSV = async (req: MulterRequest, res: Respons
         
         // Only add rows that have at least some valid data
         if (transaction.account_number || transaction.description1 || transaction.transaction_date) {
-          console.log("Adding transaction:", transaction);
-          transactions.push(transaction);
+          // Skip test/dummy transactions
+          if (transaction.description1 && 
+              (transaction.description1.toUpperCase().includes('DUMMY') || 
+               transaction.description1.toUpperCase().includes('TEST TRANSACTION'))) {
+            console.warn("Skipping dummy/test transaction:", transaction.description1);
+          } else {
+            console.log("Adding transaction:", transaction);
+            transactions.push(transaction);
+          }
         } else {
           console.warn("Skipping invalid transaction row:", row);
         }
