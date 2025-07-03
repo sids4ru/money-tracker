@@ -4,10 +4,15 @@ import fs from 'fs';
 import path from 'path';
 import csv from 'csv-parser';
 import { Multer } from 'multer';
+import { query, get, run } from '../database/db'; // Import database functions
 
-// Extend the Express Request type to include the file from multer
+// Extend the Express Request type to include the file from multer and other form fields
 interface MulterRequest extends Request {
   file?: Express.Multer.File;
+  body: {
+    autoApplyCategories?: string;
+    [key: string]: any;
+  }
 }
 
 /**
@@ -241,6 +246,184 @@ export const searchTransactions = async (req: Request, res: Response): Promise<v
 /**
  * Parse and import multiple transactions from a CSV file
  */
+/**
+ * Auto-categorize uncategorized transactions
+ */
+export const autoCategorizeTransactions = async (req: Request, res: Response): Promise<void> => {
+  try {
+    // We'll use direct SQL queries for better reliability
+    
+    // Start a transaction
+    await run('BEGIN TRANSACTION');
+    
+    // 1. Find all transactions without categories
+    console.log('Starting auto-categorization process...');
+    console.log('Step 1: Finding uncategorized transactions');
+    
+    // Find uncategorized transactions
+    const uncategorizedTransactions = await query(`
+      SELECT t.id, t.description1
+      FROM transactions t
+      LEFT JOIN transaction_categories tc ON t.id = tc.transaction_id
+      WHERE tc.id IS NULL
+      ORDER BY t.transaction_date DESC
+    `);
+    
+    console.log(`Found ${uncategorizedTransactions.length} uncategorized transactions`);
+    
+    if (uncategorizedTransactions.length === 0) {
+      await run('COMMIT');
+      res.status(200).json({
+        success: true,
+        message: 'No uncategorized transactions found',
+        categorized: 0
+      });
+      return;
+    }
+    
+    // 2. Get all patterns from the database
+    console.log('Step 2: Fetching similarity patterns');
+    const patterns = await query(`
+      SELECT * FROM transaction_similarity_patterns
+      WHERE category_id IS NOT NULL
+    `);
+    
+    console.log(`Found ${patterns.length} patterns with category IDs`);
+    
+    if (patterns.length === 0) {
+      await run('ROLLBACK');
+      res.status(400).json({
+        success: false,
+        error: 'No patterns with category IDs found. Please define patterns first.',
+        categorized: 0
+      });
+      return;
+    }
+    
+    // 3. Process each transaction
+    console.log('Step 3: Processing transactions');
+    let categorizedCount = 0;
+    
+    for (let i = 0; i < uncategorizedTransactions.length; i++) {
+      const transaction = uncategorizedTransactions[i];
+      const transactionId = transaction.id;
+      const description = transaction.description1;
+      
+      if (!description) continue;
+      
+      console.log(`[${i+1}/${uncategorizedTransactions.length}] Processing transaction ${transactionId}: "${description}"`);
+      
+      // Find best matching pattern
+      let bestMatch = null;
+      let bestConfidence = 0;
+      
+      for (const pattern of patterns) {
+        let isMatch = false;
+        
+        try {
+          switch (pattern.pattern_type) {
+            case 'exact':
+              isMatch = description.toLowerCase() === pattern.pattern_value.toLowerCase();
+              break;
+            case 'contains':
+              isMatch = description.toLowerCase().includes(pattern.pattern_value.toLowerCase());
+              break;
+            case 'starts_with':
+              isMatch = description.toLowerCase().startsWith(pattern.pattern_value.toLowerCase());
+              break;
+            case 'regex':
+              try {
+                const regex = new RegExp(pattern.pattern_value, 'i');
+                isMatch = regex.test(description);
+              } catch (e) {
+                console.error('Invalid regex pattern:', pattern.pattern_value);
+              }
+              break;
+            case 'merchant': // Add support for merchant pattern type
+              isMatch = description.toLowerCase().includes(pattern.pattern_value.toLowerCase());
+              break;
+            case 'description': // Add support for description pattern type
+              isMatch = description.toLowerCase().includes(pattern.pattern_value.toLowerCase());
+              break;
+            default:
+              // For any other pattern type, default to contains match
+              isMatch = description.toLowerCase().includes(pattern.pattern_value.toLowerCase());
+              break;
+          }
+          
+          if (isMatch && (pattern.confidence_score || 1) > bestConfidence) {
+            bestMatch = pattern;
+            bestConfidence = pattern.confidence_score || 1;
+            console.log(`  Matched pattern: "${pattern.pattern_value}" (${pattern.pattern_type}) with confidence ${bestConfidence}`);
+          }
+        } catch (error) {
+          const patternError = error as Error;
+          console.error(`  Error matching pattern ${pattern.id}:`, patternError.message);
+        }
+      }
+      
+      // Apply the best match if one was found
+      if (bestMatch && bestMatch.category_id) {
+        try {
+          console.log(`  Assigning category ${bestMatch.category_id} to transaction ${transactionId}`);
+          
+          // Insert into transaction_categories
+          await run(
+            'INSERT INTO transaction_categories (transaction_id, category_id) VALUES (?, ?)',
+            [transactionId, bestMatch.category_id]
+          );
+          
+          // Update transaction status
+          await run(
+            'UPDATE transactions SET grouping_status = ? WHERE id = ?',
+            ['auto', transactionId]
+          );
+          
+          // Update pattern usage
+          await run(
+            'UPDATE transaction_similarity_patterns SET usage_count = usage_count + 1 WHERE id = ?',
+            [bestMatch.id]
+          );
+          
+          categorizedCount++;
+        } catch (error) {
+          const insertError = error as Error;
+          console.error(`  Error inserting category for transaction ${transactionId}:`, insertError.message);
+          // Continue with next transaction
+        }
+      } else {
+        console.log(`  No matching pattern found for transaction ${transactionId}`);
+      }
+    }
+    
+    // Commit all changes
+    await run('COMMIT');
+    console.log(`Successfully categorized ${categorizedCount} transactions`);
+    
+    res.status(200).json({
+      success: true,
+      message: `Successfully categorized ${categorizedCount} out of ${uncategorizedTransactions.length} transactions`,
+      categorized: categorizedCount,
+      total: uncategorizedTransactions.length
+    });
+  } catch (error) {
+    console.error('Error auto-categorizing transactions:', error);
+    
+    // Attempt to rollback in case a transaction is active
+    try {
+      await run('ROLLBACK');
+      console.log('Transaction rolled back due to error');
+    } catch (rollbackError) {
+      console.error('Error rolling back transaction:', rollbackError);
+    }
+    
+    res.status(500).json({
+      success: false,
+      error: 'Server error while auto-categorizing transactions'
+    });
+  }
+};
+
 export const importTransactionsFromCSV = async (req: MulterRequest, res: Response): Promise<void> => {
   try {
     if (!req.file) {
@@ -250,6 +433,11 @@ export const importTransactionsFromCSV = async (req: MulterRequest, res: Respons
       });
       return;
     }
+
+    // Get the autoApplyCategories flag from request body (default to true if not provided)
+    console.log("Request body:", req.body); // Debug the whole request body
+    const autoApplyCategories = req.body.autoApplyCategories !== 'false';
+    console.log(`Import with auto-apply categories: ${autoApplyCategories} (Type: ${typeof req.body.autoApplyCategories})`);
 
     const transactions: Omit<Transaction, 'id' | 'created_at'>[] = [];
     
@@ -316,8 +504,9 @@ export const importTransactionsFromCSV = async (req: MulterRequest, res: Respons
           return;
         }
         
-        // Insert transactions into the database
-        const result = await TransactionModel.createBatch(transactions);
+        // Insert transactions into the database with the auto-categorization flag
+        console.log(`Starting batch import with autoApplyCategories=${autoApplyCategories}`);
+        const result = await TransactionModel.createBatch(transactions, autoApplyCategories);
         
         res.status(201).json({
           success: true,
