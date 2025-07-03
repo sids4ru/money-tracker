@@ -63,4 +63,7 @@ router.delete('/:id', transactionController.deleteTransaction);
 // Route to import transactions from CSV file
 router.post('/import', upload.single('file'), transactionController.importTransactionsFromCSV);
 
+// Route to auto-categorize uncategorized transactions
+router.post('/auto-categorize', transactionController.autoCategorizeTransactions);
+
 export default router;

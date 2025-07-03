@@ -134,6 +134,22 @@ export const TransactionService = {
   },
 
   /**
+   * Auto-categorize all uncategorized transactions
+   * @returns Object with count of categorized transactions
+   */
+  async autoCategorizeTransactions(): Promise<{ categorized: number }> {
+    try {
+      const response = await api.post('/transactions/auto-categorize');
+      return {
+        categorized: response.data.categorized
+      };
+    } catch (error) {
+      console.error('Error auto-categorizing transactions:', error);
+      throw error;
+    }
+  },
+
+  /**
    * Search for transactions with given parameters
    */
   async searchTransactions(params: SearchParams): Promise<Transaction[]> {
@@ -179,11 +195,14 @@ export const TransactionService = {
 
   /**
    * Import transactions from a CSV file
+   * @param file The CSV file to import
+   * @param autoApplyCategories Whether to auto-apply categories to imported transactions
    */
-  async importFromCSV(file: File): Promise<{ added: number; duplicates: number }> {
+  async importFromCSV(file: File, autoApplyCategories: boolean = true): Promise<{ added: number; duplicates: number }> {
     try {
       const formData = new FormData();
       formData.append('file', file);
+      formData.append('autoApplyCategories', autoApplyCategories.toString());
       
       // Use multipart/form-data for file upload
       const response = await api.post('/transactions/import', formData, {

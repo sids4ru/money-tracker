@@ -135,8 +135,14 @@ export class TransactionModel {
 
   /**
    * Create multiple transactions in a batch
+   * @param transactions Array of transactions to create
+   * @param autoApplyCategories Whether to auto-apply categories to imported transactions
+   * @returns Object with count of added and duplicate transactions
    */
-  static async createBatch(transactions: Omit<Transaction, 'id' | 'created_at'>[]): Promise<{ added: number; duplicates: number }> {
+  static async createBatch(
+    transactions: Omit<Transaction, 'id' | 'created_at'>[],
+    autoApplyCategories: boolean = true
+  ): Promise<{ added: number; duplicates: number }> {
     let added = 0;
     let duplicates = 0;
 
@@ -149,10 +155,43 @@ export class TransactionModel {
           continue;
         }
 
-        const newId = await this.create(transaction);
-        if (newId) {
-          added++;
-          console.log(`Successfully added transaction ${newId}: ${transaction.description1}`);
+        // If auto-apply categories is disabled, we'll bypass the auto-categorization
+        if (!autoApplyCategories) {
+          // Insert the transaction without auto-categorization
+          const result = await run(
+            `INSERT INTO transactions (
+              account_number, transaction_date, description1, description2, description3,
+              debit_amount, credit_amount, balance, currency, transaction_type,
+              local_currency_amount, local_currency, transaction_category_id
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            [
+              transaction.account_number,
+              transaction.transaction_date,
+              transaction.description1,
+              transaction.description2 || null,
+              transaction.description3 || null,
+              transaction.debit_amount || null,
+              transaction.credit_amount || null,
+              transaction.balance,
+              transaction.currency,
+              transaction.transaction_type,
+              transaction.local_currency_amount || null,
+              transaction.local_currency || null,
+              transaction.transaction_category_id || null
+            ]
+          );
+          
+          if (result.lastID) {
+            added++;
+            console.log(`Successfully added transaction ${result.lastID}: ${transaction.description1} (without auto-categorization)`);
+          }
+        } else {
+          // Use the regular create method which includes auto-categorization
+          const newId = await this.create(transaction);
+          if (newId) {
+            added++;
+            console.log(`Successfully added transaction ${newId}: ${transaction.description1}`);
+          }
         }
       } catch (error) {
         console.error('Error adding transaction:', error);
@@ -169,6 +208,8 @@ export class TransactionModel {
   static async attemptAutoCategorization(transactionId: number, description: string): Promise<boolean> {
     try {
       // Import TransactionSimilarityPatternModel here to avoid circular dependency
+      console.log(`Attempting auto-categorization for transaction ${transactionId} with description "${description}"`);
+      
       const { TransactionSimilarityPatternModel } = require('./TransactionSimilarityPattern');
       const { TransactionCategoryModel } = require('./Category');
       
