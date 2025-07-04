@@ -83,7 +83,7 @@ const AnalysisPage: React.FC = () => {
       </Typography>
       
       {/* Year selector for line chart */}
-      <Paper sx={{ p: 3, mb: 4 }}>
+      <Paper sx={{ p: 3, mb: 4, overflow: 'visible' }}>
         <Stack 
           direction={{ xs: 'column', md: 'row' }} 
           spacing={3} 
@@ -93,12 +93,12 @@ const AnalysisPage: React.FC = () => {
           <Box sx={{ flexGrow: 1 }}>
             <Typography variant="h6">Monthly Spending by Category</Typography>
           </Box>
-          <Box sx={{ minWidth: 200 }}>
-            <FormControl fullWidth>
-              <InputLabel id="year-select-label">Year</InputLabel>
+          <Box sx={{ minWidth: 120 }}>
+            <FormControl fullWidth size="small">
+              <InputLabel id="monthly-year-select-label">Year</InputLabel>
               <Select
-                labelId="year-select-label"
-                id="year-select"
+                labelId="monthly-year-select-label"
+                id="monthly-year-select"
                 value={year}
                 label="Year"
                 onChange={handleYearChange}
@@ -114,8 +114,8 @@ const AnalysisPage: React.FC = () => {
         </Stack>
         
         {/* Parent category spending line chart */}
-        <Card variant="outlined" sx={{ mb: 2 }}>
-          <CardContent>
+        <Card variant="outlined" sx={{ mb: 2, overflow: 'visible' }}>
+          <CardContent sx={{ overflow: 'visible' }}>
             <ParentCategoryLineChart year={year} />
           </CardContent>
         </Card>
@@ -128,7 +128,7 @@ const AnalysisPage: React.FC = () => {
       <Divider sx={{ my: 4 }} />
       
       {/* Category breakdown section */}
-      <Paper sx={{ p: 3 }}>
+      <Paper sx={{ p: 3, overflow: 'visible' }}>
         <Typography variant="h6" gutterBottom>
           Category Breakdown
         </Typography>
@@ -177,8 +177,8 @@ const AnalysisPage: React.FC = () => {
         </Stack>
         
         {/* Category spending bar chart */}
-        <Card variant="outlined">
-          <CardContent>
+        <Card variant="outlined" sx={{ overflow: 'visible' }}>
+          <CardContent sx={{ overflow: 'visible' }}>
             {selectedParentCategory ? (
               <CategoryBarChart 
                 parentId={selectedParentCategory} 
@@ -197,6 +197,70 @@ const AnalysisPage: React.FC = () => {
         <Typography variant="body2" color="text.secondary" sx={{ mt: 2 }}>
           This chart breaks down spending within the selected parent category for the chosen month and year.
         </Typography>
+      </Paper>
+      
+      <Divider sx={{ my: 4 }} />
+      
+      {/* Daily spending chart section */}
+      <Paper sx={{ p: 3, overflow: 'visible' }}>
+        <Stack 
+          direction={{ xs: 'column', md: 'row' }} 
+          spacing={3} 
+          alignItems={{ xs: 'stretch', md: 'center' }} 
+          sx={{ mb: 2 }}
+        >
+          <Box sx={{ flexGrow: 1 }}>
+            <Typography variant="h6">Daily Spending Analysis</Typography>
+          </Box>
+          <Box sx={{ minWidth: 200 }}>
+            <FormControl fullWidth>
+              <InputLabel id="daily-chart-month-select-label">Month</InputLabel>
+              <Select
+                labelId="daily-chart-month-select-label"
+                id="daily-chart-month-select"
+                value={month} 
+                label="Month"
+                onChange={handleMonthChange}
+              >
+                {monthNames.map((name, index) => (
+                  <MenuItem key={index} value={index + 1}>
+                    {name}
+                  </MenuItem>
+                ))}
+              </Select>
+            </FormControl>
+          </Box>
+          <Box sx={{ minWidth: 120 }}>
+            <FormControl fullWidth size="small">
+              <InputLabel id="year-select-label">Year</InputLabel>
+              <Select
+                labelId="year-select-label"
+                id="year-select"
+                value={year}
+                label="Year"
+                onChange={handleYearChange}
+              >
+                {years.map((y) => (
+                  <MenuItem key={y} value={y}>
+                    {y}
+                  </MenuItem>
+                ))}
+              </Select>
+            </FormControl>
+          </Box>
+        </Stack>
+        
+        <Card variant="outlined" sx={{ overflow: 'visible' }}>
+          <CardContent sx={{ overflow: 'visible' }}>
+            {/* Only render the daily chart part */}
+            <Box sx={{ height: 400, p: 2 }}>
+              <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+                This chart shows the daily spending for each parent category in {monthNames[month - 1]} {year}.
+              </Typography>
+              <ParentCategoryLineChart year={year} selectedMonth={month} showOnlyDailyChart={true} />
+            </Box>
+          </CardContent>
+        </Card>
       </Paper>
     </Container>
   );

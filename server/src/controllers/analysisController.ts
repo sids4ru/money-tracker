@@ -8,6 +8,11 @@ import { ParentCategoryModel } from '../models/ParentCategory';
 export const getSpendingByParentCategoryPerMonth = async (req: Request, res: Response): Promise<void> => {
   try {
     const year = parseInt(req.query.year as string) || new Date().getFullYear();
+    // Always include daily data regardless of year when includeDaily is true
+    const includeDaily = (req.query.includeDaily === 'true');
+    // Use the specified month (defaults to current month)
+    const selectedMonth = parseInt(req.query.currentMonth as string) || new Date().getMonth() + 1; // 1-based month
+    const isCurrentYear = year === new Date().getFullYear();
     
     // Get all parent categories
     const parentCategories = await ParentCategoryModel.getAll();
@@ -19,7 +24,13 @@ export const getSpendingByParentCategoryPerMonth = async (req: Request, res: Res
         id: number;
         name: string;
         data: number[];
+        dailyData?: {
+          days: string[];
+          values: number[];
+        };
       }[];
+      currentMonth?: number;
+      isCurrentYear?: boolean;
     } = {
       months: [
         'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
@@ -29,7 +40,9 @@ export const getSpendingByParentCategoryPerMonth = async (req: Request, res: Res
         id: cat.id!,
         name: cat.name,
         data: Array(12).fill(0) // Initialize with zeros for 12 months
-      }))
+      })),
+      currentMonth: selectedMonth,
+      isCurrentYear: isCurrentYear
     };
     
     // Add debug info
@@ -133,6 +146,109 @@ export const getSpendingByParentCategoryPerMonth = async (req: Request, res: Res
       if (categoryIndex !== -1) {
         // Month is 1-based in SQL result, but 0-based in our array
         result.categories[categoryIndex].data[spending.month - 1] = spending.total;
+      }
+    }
+    
+    // If we need to include daily data for the selected month
+    if (includeDaily) {
+      // Calculate days in the selected month
+      const daysInMonth = new Date(year, selectedMonth, 0).getDate();
+      
+      // For each category, fetch daily spending for the selected month
+      for (let i = 0; i < result.categories.length; i++) {
+        const category = result.categories[i];
+        
+        // Initialize daily data structure with the correct number of days in the month
+        category.dailyData = {
+          days: Array.from({ length: daysInMonth }, (_, index) => `${index + 1}`),
+          values: Array(daysInMonth).fill(0)
+        };
+        
+        // Skip if there's no spending for this category in the selected month
+        if (category.data[selectedMonth - 1] === 0) {
+          continue;
+        }
+        
+        // Fetch daily spending for this parent category for the selected month
+        // Note: transaction_date is in DD/MM/YYYY format, so we extract day differently
+        const dailySpendingData = await query<{
+          parent_id: number;
+          day: number; // Day of month (1-31)
+          total: number;
+        }>(`
+          WITH DailyTransactions AS (
+            -- Get transactions from transaction_categories
+            SELECT 
+              tc.parent_category_id as parent_id,
+              CAST(substr(t.transaction_date, 1, 2) AS INTEGER) AS day,
+              CASE
+                WHEN t.debit_amount IS NOT NULL THEN -CAST(REPLACE(t.debit_amount, ',', '') AS REAL)
+                WHEN t.credit_amount IS NOT NULL THEN CAST(REPLACE(t.credit_amount, ',', '') AS REAL)
+                ELSE 0
+              END AS amount
+            FROM 
+              transaction_categories tc
+            JOIN
+              transactions t ON tc.transaction_id = t.id  
+            WHERE 
+              substr(t.transaction_date, 7, 4) = ? 
+              AND substr(t.transaction_date, 4, 2) = ?
+              AND tc.parent_category_id = ?
+            
+            UNION ALL
+            
+            -- Get transactions with direct category_id
+            SELECT 
+              c.parent_id,
+              CAST(substr(t.transaction_date, 1, 2) AS INTEGER) AS day,
+              CASE
+                WHEN t.debit_amount IS NOT NULL THEN -CAST(REPLACE(t.debit_amount, ',', '') AS REAL)
+                WHEN t.credit_amount IS NOT NULL THEN CAST(REPLACE(t.credit_amount, ',', '') AS REAL)
+                ELSE 0
+              END AS amount
+            FROM 
+              transactions t
+            JOIN 
+              categories c ON t.category_id = c.id
+            WHERE 
+              substr(t.transaction_date, 7, 4) = ? 
+              AND substr(t.transaction_date, 4, 2) = ?
+              AND c.parent_id = ?
+              AND t.category_id IS NOT NULL
+          )
+          
+          -- Sum up by day
+          SELECT 
+            parent_id,
+            day,
+            SUM(amount) AS total
+          FROM 
+            DailyTransactions
+          GROUP BY 
+            parent_id, day
+          ORDER BY 
+            day
+        `, [
+          year.toString(), 
+          selectedMonth.toString().padStart(2, '0'),
+          category.id,
+          year.toString(),
+          selectedMonth.toString().padStart(2, '0'),
+          category.id
+        ]);
+        
+        // Process daily spending data
+        if (dailySpendingData.length > 0) {
+          for (const dailySpending of dailySpendingData) {
+            // Day is 1-based in SQL result and also 1-based in our array (day 1 is index 0)
+            const dayIndex = dailySpending.day - 1;
+            if (dayIndex >= 0 && dayIndex < daysInMonth) {
+              category.dailyData.values[dayIndex] = dailySpending.total;
+            }
+          }
+          
+          console.log(`Daily spending data for category ${category.name}: ${JSON.stringify(category.dailyData)}`);
+        }
       }
     }
     

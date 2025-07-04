@@ -6,7 +6,13 @@ export interface MonthlySpendingByParentCategory {
     id: number;
     name: string;
     data: number[];
+    dailyData?: {
+      days: string[];
+      values: number[];
+    };
   }[];
+  currentMonth?: number; // 1-based month number
+  isCurrentYear?: boolean;
 }
 
 export interface CategorySpendingForMonth {
@@ -23,10 +29,17 @@ export interface CategorySpendingForMonth {
 export const AnalysisService = {
   /**
    * Get spending by parent category per month for a year
+   * Daily data will be included for the specified month (defaults to current month)
    */
-  async getSpendingByParentCategoryPerMonth(year: number = new Date().getFullYear()): Promise<MonthlySpendingByParentCategory> {
+  async getSpendingByParentCategoryPerMonth(
+    year: number = new Date().getFullYear(),
+    selectedMonth: number = new Date().getMonth() + 1
+  ): Promise<MonthlySpendingByParentCategory> {
     try {
-      const response = await api.get(`/analysis/spending/parent-categories?year=${year}`);
+      const isCurrentYear = year === new Date().getFullYear();
+      const includeDaily = true; // Always include daily data for the selected month
+      
+      const response = await api.get(`/analysis/spending/parent-categories?year=${year}&includeDaily=${includeDaily}&currentMonth=${selectedMonth}`);
       return response.data.data;
     } catch (error) {
       console.error('Error fetching parent category monthly spending:', error);

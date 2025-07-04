@@ -63,25 +63,31 @@ const CategoryBarChart: React.FC<CategoryBarChartProps> = ({
             // Get the index of the hovered bar
             const index = context.dataIndex;
             
-            // Add safety check to prevent errors when the index doesn't exist in the data
-            if (!spendingData || !spendingData.categories || !spendingData.categories[index]) {
-              return 'No data available';
+            // Get the label from the chart data
+            const label = context.chart.data.labels?.[index] as string || 'Unknown';
+            
+            // Get the absolute value from chart data
+            const datasetIndex = context.datasetIndex;
+            const absValue = context.chart.data.datasets[datasetIndex].data[index] as number;
+            
+            // Determine if it's an expense or income - only if we have spending data available
+            let originalValue = 0;
+            let isExpense = false;
+            
+            // Check if we have the spending data and it contains this index
+            if (spendingData && spendingData.categories && spendingData.categories[index]) {
+              originalValue = spendingData.categories[index].total;
+              isExpense = originalValue < 0;
+            } else {
+              // If no spending data, assume the absolute value is correct and use it
+              originalValue = absValue;
             }
             
-            // Get the actual category object from our data source
-            const category = spendingData.categories[index];
-            const originalValue = category.total;
-            const isExpense = originalValue < 0;
-            
-            // Display the actual value with its sign intact, not the absolute value
+            // Display the value with proper formatting
             const formattedValue = formatCurrency(originalValue);
             
-            // Use the category name from our data
-            const categoryName = category.name;
-            const typeLabel = isExpense ? 'Expense' : 'Income';
-            
-            // Create a more descriptive tooltip that shows the actual value with correct sign
-            return `${categoryName}: ${formattedValue} (${typeLabel})`;
+            // Create a descriptive tooltip - only show expense/income label for this specific chart
+            return `${label}: ${formattedValue}`;
           };
         }
       }
@@ -220,7 +226,15 @@ const CategoryBarChart: React.FC<CategoryBarChartProps> = ({
         ticks: {
           callback: function(value) {
             return formatCurrency(value as number);
-          }
+          },
+          maxTicksLimit: 8,
+          padding: 10
+        }
+      },
+      y: {
+        // Add more padding for category labels
+        ticks: {
+          padding: 8
         }
       }
     },
@@ -233,7 +247,7 @@ const CategoryBarChart: React.FC<CategoryBarChartProps> = ({
 
 
   return (
-    <Box sx={{ height: 400, p: 2 }}>
+    <Box sx={{ height: 400, p: 2, overflow: 'visible' }}>
       <Bar data={chartData} options={options} />
     </Box>
   );
