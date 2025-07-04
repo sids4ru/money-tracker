@@ -7,7 +7,9 @@ import {
   Title,
   Tooltip,
   Legend,
-  ChartOptions
+  ChartOptions,
+  TooltipItem,
+  Chart
 } from 'chart.js';
 import { Bar } from 'react-chartjs-2';
 import { Box, CircularProgress, Typography } from '@mui/material';
@@ -40,6 +42,60 @@ const CategoryBarChart: React.FC<CategoryBarChartProps> = ({
   const [error, setError] = useState<string | null>(null);
   const [spendingData, setSpendingData] = useState<CategorySpendingForMonth | null>(null);
 
+  // Helper function to format currency
+  const formatCurrency = (value: number): string => {
+    return new Intl.NumberFormat('en-US', {
+      style: 'currency',
+      currency: 'EUR'
+    }).format(value);
+  };
+
+  // Create and register/unregister tooltip plugin when props change
+  useEffect(() => {
+    // Create a tooltip plugin specific to this chart instance with current data
+    const tooltipPluginId = `categoryBarTooltipPlugin-${parentId}-${month}-${year}`;
+    
+    const tooltipPlugin = {
+      id: tooltipPluginId,
+      beforeInit: (chart: Chart) => {
+        if (chart.options.plugins?.tooltip?.callbacks) {
+          chart.options.plugins.tooltip.callbacks.label = function(context: TooltipItem<'bar'>) {
+            // Get the index of the hovered bar
+            const index = context.dataIndex;
+            
+            // Add safety check to prevent errors when the index doesn't exist in the data
+            if (!spendingData || !spendingData.categories || !spendingData.categories[index]) {
+              return 'No data available';
+            }
+            
+            // Get the actual category object from our data source
+            const category = spendingData.categories[index];
+            const originalValue = category.total;
+            const isExpense = originalValue < 0;
+            
+            // Display the actual value with its sign intact, not the absolute value
+            const formattedValue = formatCurrency(originalValue);
+            
+            // Use the category name from our data
+            const categoryName = category.name;
+            const typeLabel = isExpense ? 'Expense' : 'Income';
+            
+            // Create a more descriptive tooltip that shows the actual value with correct sign
+            return `${categoryName}: ${formattedValue} (${typeLabel})`;
+          };
+        }
+      }
+    };
+
+    // Register this specific tooltip plugin
+    ChartJS.register(tooltipPlugin);
+    
+    // Cleanup function to unregister the plugin when component unmounts or updates
+    return () => {
+      ChartJS.unregister(tooltipPlugin);
+    };
+  }, [parentId, month, year, spendingData]);
+  
   useEffect(() => {
     const fetchData = async () => {
       setLoading(true);
@@ -135,13 +191,6 @@ const CategoryBarChart: React.FC<CategoryBarChartProps> = ({
     ]
   };
 
-  // Helper function to format currency
-  const formatCurrency = (value: number): string => {
-    return new Intl.NumberFormat('en-US', {
-      style: 'currency',
-      currency: 'EUR'
-    }).format(value);
-  };
 
   const options: ChartOptions<'bar'> = {
     responsive: true,
@@ -182,37 +231,6 @@ const CategoryBarChart: React.FC<CategoryBarChartProps> = ({
     }
   };
 
-  // Manually configure tooltip callbacks after render via plugin
-  // This avoids TypeScript errors with the complex tooltip configuration
-  ChartJS.register({
-    id: 'categoryBarTooltipPlugin',
-    beforeInit: (chart) => {
-      if (chart.options.plugins && chart.options.plugins.tooltip && chart.options.plugins.tooltip.callbacks) {
-        chart.options.plugins.tooltip.callbacks.label = function(context) {
-          // Get the index of the hovered bar
-          const index = context.dataIndex;
-          
-          // Add safety check to prevent errors when the index doesn't exist in the data
-          if (!spendingData || !spendingData.categories || !spendingData.categories[index]) {
-            return 'No data available';
-          }
-          
-          // Get the actual category object from our data source
-          const category = spendingData.categories[index];
-          const originalValue = category.total;
-          const absValue = Math.abs(originalValue);
-          const formattedValue = formatCurrency(absValue);
-          
-          // Use the category name from our data
-          const categoryName = category.name;
-          const typeLabel = originalValue > 0 ? 'Income' : 'Expense';
-          
-          // Create a more descriptive tooltip
-          return `${categoryName}: ${formattedValue} (${typeLabel})`;
-        };
-      }
-    }
-  });
 
   return (
     <Box sx={{ height: 400, p: 2 }}>
