@@ -836,6 +836,33 @@ export const CategoryController = {
         grouping_status: 'manual',
         transaction_category_id: assignmentId
       });
+      
+      // Create or update transaction similarity pattern based on this assignment
+      if (transaction.description1) {
+        // Check if a pattern already exists for this description
+        const existingPatterns = await TransactionSimilarityPatternModel.findMatchingPatterns(transaction.description1);
+        
+        if (existingPatterns.length > 0) {
+          // Update the existing pattern with the new category assignment
+          console.log(`Updating existing pattern for "${transaction.description1}"`);
+          const pattern = existingPatterns[0];
+          await TransactionSimilarityPatternModel.update(pattern.id!, {
+            category_id: categoryId,
+            parent_category_id: category.parent_id || null,
+            usage_count: (pattern.usage_count || 0) + 1
+          });
+        } else {
+          // Create a new pattern
+          console.log(`Creating new pattern for "${transaction.description1}"`);
+          await TransactionSimilarityPatternModel.create({
+            pattern_type: 'contains', // Using contains as default pattern type
+            pattern_value: transaction.description1,
+            category_id: categoryId,
+            parent_category_id: category.parent_id || null,
+            confidence_score: 1.0
+          });
+        }
+      }
 
       // Handle similar transactions if requested
       let updatedSimilar = 0;
