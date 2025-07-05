@@ -379,12 +379,9 @@ export const importTransactionsFromFile = async (req: MulterRequest, res: Respon
 export const autoCategorizeTransactions = async (req: Request, res: Response): Promise<void> => {
   try {
     // We'll use direct SQL queries for better reliability
-    
-    // Start a transaction
-    await run('BEGIN TRANSACTION');
+    console.log('Starting auto-categorization process...');
     
     // 1. Find all transactions without categories
-    console.log('Starting auto-categorization process...');
     console.log('Step 1: Finding uncategorized transactions');
     
     // Find uncategorized transactions
@@ -399,7 +396,6 @@ export const autoCategorizeTransactions = async (req: Request, res: Response): P
     console.log(`Found ${uncategorizedTransactions.length} uncategorized transactions`);
     
     if (uncategorizedTransactions.length === 0) {
-      await run('COMMIT');
       res.status(200).json({
         success: true,
         message: 'No uncategorized transactions found',
@@ -418,7 +414,6 @@ export const autoCategorizeTransactions = async (req: Request, res: Response): P
     console.log(`Found ${patterns.length} patterns with category IDs`);
     
     if (patterns.length === 0) {
-      await run('ROLLBACK');
       res.status(400).json({
         success: false,
         error: 'No patterns with category IDs found. Please define patterns first.',
@@ -523,8 +518,6 @@ export const autoCategorizeTransactions = async (req: Request, res: Response): P
       }
     }
     
-    // Commit all changes
-    await run('COMMIT');
     console.log(`Successfully categorized ${categorizedCount} transactions`);
     
     res.status(200).json({
@@ -535,14 +528,6 @@ export const autoCategorizeTransactions = async (req: Request, res: Response): P
     });
   } catch (error) {
     console.error('Error auto-categorizing transactions:', error);
-    
-    // Attempt to rollback in case a transaction is active
-    try {
-      await run('ROLLBACK');
-      console.log('Transaction rolled back due to error');
-    } catch (rollbackError) {
-      console.error('Error rolling back transaction:', rollbackError);
-    }
     
     res.status(500).json({
       success: false,

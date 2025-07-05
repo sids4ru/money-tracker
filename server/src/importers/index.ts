@@ -11,6 +11,7 @@ export * from './ImporterRegistry';
 
 // Import all available importers
 import { AIBImporter } from './AIBImporter';
+import { RevoluteImporter } from './RevoluteImporter';
 
 /**
  * Register all available importers with the registry
@@ -21,6 +22,9 @@ export function registerImporters(): void {
   
   // Register the AIB importer
   ImporterRegistry.registerImporter(new AIBImporter());
+  
+  // Register the Revolute importer
+  ImporterRegistry.registerImporter(new RevoluteImporter());
   
   // Additional importers can be registered here in the future
 }

@@ -43,6 +43,9 @@ if (!fs.existsSync(uploadsDir)) {
   fs.mkdirSync(uploadsDir, { recursive: true });
 }
 
+// Route to get all available importers
+router.get('/importers', transactionController.getAvailableImporters);
+
 // Route to get all transactions
 router.get('/', transactionController.getAllTransactions);
 
@@ -60,9 +63,6 @@ router.put('/:id', transactionController.updateTransaction);
 
 // Route to delete a transaction
 router.delete('/:id', transactionController.deleteTransaction);
-
-// Route to get all available importers
-router.get('/importers', transactionController.getAvailableImporters);
 
 // Route to import transactions using selected importer
 router.post('/import', upload.single('file'), transactionController.importTransactionsFromFile);

@@ -301,22 +301,21 @@ export class TransactionModel {
    */
   static async delete(id: number): Promise<boolean> {
     try {
-      // Start a transaction to ensure atomicity
-      await run('BEGIN TRANSACTION');
+      // Check if the transaction exists before proceeding
+      const transaction = await this.getById(id);
+      if (!transaction) {
+        return false;
+      }
       
       // First delete related records from transaction_categories
+      // Note: We rely on the run() function's built-in transaction handling
       await run('DELETE FROM transaction_categories WHERE transaction_id = ?', [id]);
       
       // Then delete the transaction itself
       const result = await run('DELETE FROM transactions WHERE id = ?', [id]);
       
-      // Commit the transaction
-      await run('COMMIT');
-      
-      return result.changes > 0;
+      return true;
     } catch (error) {
-      // Rollback in case of error
-      await run('ROLLBACK');
       console.error(`Error deleting transaction ${id}:`, error);
       throw error;
     }
