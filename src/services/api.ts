@@ -193,15 +193,40 @@ export const TransactionService = {
     }
   },
 
+    /**
+   * Get all available transaction importers
+   * @returns Array of available importers with their details
+   */
+  async getAvailableImporters(): Promise<{ 
+    name: string; 
+    code: string; 
+    description: string; 
+    supportedFileTypes: string[];
+  }[]> {
+    try {
+      const response = await api.get('/transactions/importers');
+      return response.data.data;
+    } catch (error) {
+      console.error('Error fetching importers:', error);
+      throw error;
+    }
+  },
+
   /**
-   * Import transactions from a CSV file
-   * @param file The CSV file to import
+   * Import transactions from a file using a specific importer
+   * @param file The file to import
+   * @param importerCode The code of the importer to use
    * @param autoApplyCategories Whether to auto-apply categories to imported transactions
    */
-  async importFromCSV(file: File, autoApplyCategories: boolean = true): Promise<{ added: number; duplicates: number }> {
+  async importFromFile(
+    file: File, 
+    importerCode: string, 
+    autoApplyCategories: boolean = true
+  ): Promise<{ added: number; duplicates: number }> {
     try {
       const formData = new FormData();
       formData.append('file', file);
+      formData.append('importerCode', importerCode);
       formData.append('autoApplyCategories', autoApplyCategories.toString());
       
       // Use multipart/form-data for file upload
@@ -216,9 +241,19 @@ export const TransactionService = {
         duplicates: response.data.duplicates
       };
     } catch (error) {
-      console.error('Error importing CSV:', error);
+      console.error('Error importing file:', error);
       throw error;
     }
+  },
+
+  /**
+   * Import transactions from a CSV file
+   * @param file The CSV file to import
+   * @param autoApplyCategories Whether to auto-apply categories to imported transactions
+   */
+  async importFromCSV(file: File, autoApplyCategories: boolean = true): Promise<{ added: number; duplicates: number }> {
+    // Use the AIB importer by default for backward compatibility
+    return this.importFromFile(file, 'aib-importer', autoApplyCategories);
   }
 };
 

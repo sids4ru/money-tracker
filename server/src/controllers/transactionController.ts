@@ -2,15 +2,17 @@ import { Request, Response } from 'express';
 import { TransactionModel, Transaction } from '../models/Transaction';
 import fs from 'fs';
 import path from 'path';
-import csv from 'csv-parser';
 import { Multer } from 'multer';
 import { query, get, run } from '../database/db'; // Import database functions
+import { ImporterRegistry } from '../importers';
+import { NormalizedTransaction } from '../importers/types';
 
 // Extend the Express Request type to include the file from multer and other form fields
 interface MulterRequest extends Request {
   file?: Express.Multer.File;
   body: {
     autoApplyCategories?: string;
+    importerCode?: string;
     [key: string]: any;
   }
 }
@@ -244,8 +246,133 @@ export const searchTransactions = async (req: Request, res: Response): Promise<v
 };
 
 /**
- * Parse and import multiple transactions from a CSV file
+ * Get all available transaction importers
  */
+export const getAvailableImporters = (req: Request, res: Response): void => {
+  try {
+    const importers = ImporterRegistry.getAllImporters().map(importer => ({
+      name: importer.name,
+      code: importer.code,
+      description: importer.description || '',
+      supportedFileTypes: importer.supportedFileTypes
+    }));
+    
+    res.status(200).json({
+      success: true,
+      count: importers.length,
+      data: importers
+    });
+  } catch (error) {
+    console.error('Error getting available importers:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Server error while fetching available importers'
+    });
+  }
+};
+
+/**
+ * Import transactions from a file using an importer plugin
+ */
+export const importTransactionsFromFile = async (req: MulterRequest, res: Response): Promise<void> => {
+  try {
+    if (!req.file) {
+      res.status(400).json({
+        success: false,
+        error: 'No file uploaded'
+      });
+      return;
+    }
+
+    // Get parameters from request
+    const importerCode = req.body.importerCode || 'aib-importer'; // Default to AIB importer
+    const autoApplyCategories = req.body.autoApplyCategories !== 'false';
+    
+    console.log(`Import with importer: ${importerCode}, auto-apply categories: ${autoApplyCategories}`);
+    
+    // Get the file buffer
+    const fileBuffer = fs.readFileSync(req.file.path);
+    
+    // Get the appropriate importer from registry
+    const importer = ImporterRegistry.getImporter(importerCode);
+    if (!importer) {
+      fs.unlinkSync(req.file.path); // Clean up the file
+      res.status(400).json({
+        success: false,
+        error: `Importer with code ${importerCode} not found`
+      });
+      return;
+    }
+    
+    try {
+      // Parse the file using the importer
+      const normalizedTransactions = await importer.parseFile(fileBuffer);
+      
+      if (normalizedTransactions.length === 0) {
+        fs.unlinkSync(req.file.path);
+        res.status(400).json({
+          success: false,
+          error: 'No transactions found in the file'
+        });
+        return;
+      }
+      
+      // Convert normalized transactions to database format
+      const dbTransactions = normalizedTransactions.map(t => ({
+        account_number: t.accountNumber,
+        transaction_date: t.transactionDate,
+        description1: t.description1,
+        description2: t.description2,
+        description3: t.description3,
+        debit_amount: t.debitAmount,
+        credit_amount: t.creditAmount,
+        balance: t.balance,
+        currency: t.currency,
+        transaction_type: t.transactionType,
+        local_currency_amount: t.localCurrencyAmount,
+        local_currency: t.localCurrency
+      }));
+      
+      // Insert transactions into the database with the auto-categorization flag
+      console.log(`Starting batch import with ${dbTransactions.length} transactions, autoApplyCategories=${autoApplyCategories}`);
+      const result = await TransactionModel.createBatch(dbTransactions, autoApplyCategories);
+      
+      // Delete the temporary file
+      fs.unlinkSync(req.file.path);
+      
+      res.status(201).json({
+        success: true,
+        message: `Successfully imported ${result.added} transactions. ${result.duplicates} duplicates were skipped.`,
+        added: result.added,
+        duplicates: result.duplicates,
+        importer: importerCode
+      });
+    } catch (error) {
+      // Clean up file on error
+      if (fs.existsSync(req.file.path)) {
+        fs.unlinkSync(req.file.path);
+      }
+      
+      console.error(`Error using importer ${importerCode}:`, error);
+      res.status(500).json({
+        success: false,
+        error: `Error processing file with importer ${importerCode}: ${error instanceof Error ? error.message : String(error)}`
+      });
+    }
+  } catch (error) {
+    // Clean up file if it exists
+    if (req.file?.path && fs.existsSync(req.file.path)) {
+      fs.unlinkSync(req.file.path);
+    }
+    
+    console.error('Error importing transactions from file:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Server error while importing transactions'
+    });
+  }
+};
+
 /**
  * Auto-categorize uncategorized transactions
  */
@@ -424,119 +551,9 @@ export const autoCategorizeTransactions = async (req: Request, res: Response): P
   }
 };
 
+// Keep the old method for backward compatibility
 export const importTransactionsFromCSV = async (req: MulterRequest, res: Response): Promise<void> => {
-  try {
-    if (!req.file) {
-      res.status(400).json({
-        success: false,
-        error: 'No CSV file uploaded'
-      });
-      return;
-    }
-
-    // Get the autoApplyCategories flag from request body (default to true if not provided)
-    console.log("Request body:", req.body); // Debug the whole request body
-    const autoApplyCategories = req.body.autoApplyCategories !== 'false';
-    console.log(`Import with auto-apply categories: ${autoApplyCategories} (Type: ${typeof req.body.autoApplyCategories})`);
-
-    const transactions: Omit<Transaction, 'id' | 'created_at'>[] = [];
-    
-    fs.createReadStream(req.file.path)
-      .pipe(csv({
-        mapHeaders: ({ header }) => header.trim(),
-        mapValues: ({ value }) => value ? value.trim() : value
-      }))
-      .on('data', (row: any) => {
-        console.log("CSV Row:", row); // Debug log to see the actual CSV data
-        
-        // Try different column naming patterns (with or without spaces)
-        // First try precise column names, then fallback to trimmed/normalized versions
-        const getColumnValue = (columnNames: string[]): string | undefined => {
-          for (const name of columnNames) {
-            if (row[name] !== undefined) return row[name] || undefined;
-          }
-          return undefined;
-        };
-
-        // Map CSV columns to transaction fields with various possible column names
-        const transaction: Omit<Transaction, 'id' | 'created_at'> = {
-          account_number: getColumnValue(['Posted Account', 'PostedAccount', 'Account']) || '',
-          transaction_date: getColumnValue(['Posted Transactions Date', 'PostedTransactionsDate', 'Date']) || '',
-          description1: getColumnValue(['Description1', 'Description 1', 'Desc1']) || '',
-          description2: getColumnValue(['Description2', 'Description 2', 'Desc2']) || '',
-          description3: getColumnValue(['Description3', 'Description 3', 'Desc3']) || '',
-          debit_amount: getColumnValue(['Debit Amount', 'DebitAmount']),
-          credit_amount: getColumnValue(['Credit Amount', 'CreditAmount']),
-          balance: getColumnValue(['Balance']) || '',
-          currency: getColumnValue(['Posted Currency', 'PostedCurrency', 'Currency']) || '',
-          transaction_type: getColumnValue(['Transaction Type', 'TransactionType', 'Type']) || '',
-          local_currency_amount: getColumnValue(['Local Currency Amount', 'LocalCurrencyAmount']),
-          local_currency: getColumnValue(['Local Currency', 'LocalCurrency'])
-        };
-        
-        // Extra debug information
-        console.log("Processed transaction:", transaction);
-        
-        // Only add rows that have at least some valid data
-        if (transaction.account_number || transaction.description1 || transaction.transaction_date) {
-          // Skip test/dummy transactions
-          if (transaction.description1 && 
-              (transaction.description1.toUpperCase().includes('DUMMY') || 
-               transaction.description1.toUpperCase().includes('TEST TRANSACTION'))) {
-            console.warn("Skipping dummy/test transaction:", transaction.description1);
-          } else {
-            console.log("Adding transaction:", transaction);
-            transactions.push(transaction);
-          }
-        } else {
-          console.warn("Skipping invalid transaction row:", row);
-        }
-      })
-      .on('end', async () => {
-        // Delete the temporary file
-        fs.unlinkSync(req.file!.path);
-        
-        if (transactions.length === 0) {
-          res.status(400).json({
-            success: false,
-            error: 'No transactions found in the CSV file'
-          });
-          return;
-        }
-        
-        // Insert transactions into the database with the auto-categorization flag
-        console.log(`Starting batch import with autoApplyCategories=${autoApplyCategories}`);
-        const result = await TransactionModel.createBatch(transactions, autoApplyCategories);
-        
-        res.status(201).json({
-          success: true,
-          message: `Successfully imported ${result.added} transactions. ${result.duplicates} duplicates were skipped.`,
-          added: result.added,
-          duplicates: result.duplicates
-        });
-      })
-      .on('error', (error: Error) => {
-        // Delete the temporary file on error
-        if (req.file?.path && fs.existsSync(req.file.path)) {
-          fs.unlinkSync(req.file.path);
-        }
-        
-        console.error('Error parsing CSV file:', error);
-        res.status(500).json({
-          success: false,
-          error: 'Error parsing CSV file'
-        });
-      });
-  } catch (error) {
-    // Delete the temporary file if it exists
-    if (req.file?.path && fs.existsSync(req.file.path)) {
-      fs.unlinkSync(req.file.path);
-    }
-    
-    console.error('Error importing transactions from CSV:', error);
-    res.status(500).json({
-      success: false,
-      error: 'Server error while importing transactions'
-    });
-  }
+  // Forward to the new plugin-based implementation
+  req.body.importerCode = 'aib-importer'; // Force AIB importer for CSV files
+  return importTransactionsFromFile(req, res);
 };

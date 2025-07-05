@@ -14,6 +14,9 @@ import transactionRoutes from './routes/transactionRoutes';
 import categoryRoutes from './routes/categoryRoutes';
 import analysisRoutes from './routes/analysisRoutes';
 
+// Import importer registration
+import { registerImporters } from './importers';
+
 // Load environment variables from .env file
 dotenv.config();
 
@@ -60,6 +63,10 @@ async function startServer() {
   try {
     // Initialize SQLite database
     await initializeDatabase();
+    
+    // Register transaction importers
+    registerImporters();
+    console.log('Transaction importers registered');
     
     // Start express server
     const server = app.listen(PORT, () => {

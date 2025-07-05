@@ -285,9 +285,9 @@ describe('Transaction Model Tests', () => {
       // Mock the TransactionSimilarityPattern model's findMatchingPatterns method
       const originalMethod = TransactionSimilarityPatternModule.TransactionSimilarityPatternModel.findMatchingPatterns;
       
-      // Create a properly typed mock implementation
-      const mockFindMatchingPatterns = jest.fn().mockImplementation((description: string) => {
-        if (description.includes('AUTO_CATEGORIZE_TEST')) {
+      // Create a mock implementation
+      const mockFindMatchingPatterns = jest.fn().mockImplementation((description: any) => {
+        if (description && typeof description === 'string' && description.includes('AUTO_CATEGORIZE_TEST')) {
           return Promise.resolve([{
             id: patternResult.lastID,
             pattern_type: 'contains',

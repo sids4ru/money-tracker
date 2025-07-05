@@ -2,6 +2,7 @@ import express from 'express';
 import multer from 'multer';
 import path from 'path';
 import * as transactionController from '../controllers/transactionController';
+import { ImporterRegistry } from '../importers';
 
 const router = express.Router();
 
@@ -60,8 +61,11 @@ router.put('/:id', transactionController.updateTransaction);
 // Route to delete a transaction
 router.delete('/:id', transactionController.deleteTransaction);
 
-// Route to import transactions from CSV file
-router.post('/import', upload.single('file'), transactionController.importTransactionsFromCSV);
+// Route to get all available importers
+router.get('/importers', transactionController.getAvailableImporters);
+
+// Route to import transactions using selected importer
+router.post('/import', upload.single('file'), transactionController.importTransactionsFromFile);
 
 // Route to auto-categorize uncategorized transactions
 router.post('/auto-categorize', transactionController.autoCategorizeTransactions);

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   Button, 
   Box, 
@@ -8,7 +8,11 @@ import {
   Alert, 
   Snackbar,
   FormControlLabel,
-  Checkbox
+  Checkbox,
+  Select,
+  MenuItem,
+  InputLabel,
+  FormControl
 } from '@mui/material';
 import UploadFileIcon from '@mui/icons-material/UploadFile';
 import { TransactionService } from '../services/api';
@@ -17,19 +21,76 @@ interface ImportCSVProps {
   onImportComplete: () => void;
 }
 
+interface ImporterOption {
+  name: string;
+  code: string;
+  description: string;
+  supportedFileTypes: string[];
+}
+
 const ImportCSV: React.FC<ImportCSVProps> = ({ onImportComplete }) => {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const [isDragging, setIsDragging] = useState(false);
   const [autoApplyCategories, setAutoApplyCategories] = useState(true);
+  const [importers, setImporters] = useState<ImporterOption[]>([]);
+  const [selectedImporter, setSelectedImporter] = useState<string>('');
+  const [isLoadingImporters, setIsLoadingImporters] = useState(true);
+  
+  // Fetch available importers when component mounts
+  useEffect(() => {
+    const fetchImporters = async () => {
+      try {
+        setIsLoadingImporters(true);
+        let importerOptions: ImporterOption[] = [];
+        
+        try {
+          importerOptions = await TransactionService.getAvailableImporters();
+        } catch (error) {
+          console.warn('Could not fetch importers from API, using default importer', error);
+          // If API fails, use default AIB importer
+          importerOptions = [];
+        }
+        
+        // If no importers returned from API, add a default AIB importer
+        if (importerOptions.length === 0) {
+          const defaultImporter: ImporterOption = {
+            name: 'AIB Bank',
+            code: 'aib-importer',
+            description: 'Allied Irish Bank CSV exports',
+            supportedFileTypes: ['.csv']
+          };
+          importerOptions = [defaultImporter];
+          console.log('Using default importer:', defaultImporter);
+        }
+        
+        setImporters(importerOptions);
+        
+        // Set default importer
+        if (importerOptions.length > 0) {
+          setSelectedImporter(importerOptions[0].code);
+        }
+      } catch (err) {
+        console.error('Error setting up importers:', err);
+        setError('Failed to load available importers');
+      } finally {
+        setIsLoadingImporters(false);
+      }
+    };
+    
+    fetchImporters();
+  }, []);
   
   const handleFileChange = async (file: File) => {
     if (!file) return;
     
-    // Check if it's a CSV file
-    if (!file.name.endsWith('.csv')) {
-      setError('Please select a CSV file');
+    // Check file extension against supported types for selected importer
+    const importer = importers.find(imp => imp.code === selectedImporter);
+    const extension = file.name.substring(file.name.lastIndexOf('.')).toLowerCase();
+    
+    if (importer && !importer.supportedFileTypes.includes(extension)) {
+      setError(`Selected importer only supports ${importer.supportedFileTypes.join(', ')} files`);
       return;
     }
 
@@ -37,8 +98,8 @@ const ImportCSV: React.FC<ImportCSVProps> = ({ onImportComplete }) => {
     setError(null);
     
     try {
-      // Import the CSV file directly through the API with auto-categorization flag
-      const result = await TransactionService.importFromCSV(file, autoApplyCategories);
+      // Import the file with the selected importer
+      const result = await TransactionService.importFromFile(file, selectedImporter, autoApplyCategories);
       
       // Show success message
       setSuccess(`Successfully imported ${result.added} transactions. ${result.duplicates} duplicates were skipped.`);
@@ -47,7 +108,7 @@ const ImportCSV: React.FC<ImportCSVProps> = ({ onImportComplete }) => {
       onImportComplete();
     } catch (err) {
       console.error('Error importing transactions:', err);
-      setError(err instanceof Error ? err.message : 'Failed to import CSV file');
+      setError(err instanceof Error ? err.message : 'Failed to import file');
     } finally {
       setIsLoading(false);
     }
@@ -85,6 +146,12 @@ const ImportCSV: React.FC<ImportCSVProps> = ({ onImportComplete }) => {
     setError(null);
   };
 
+  // Get supported file extensions for the selected importer
+  const getSupportedFileTypes = () => {
+    const importer = importers.find(imp => imp.code === selectedImporter);
+    return importer?.supportedFileTypes.join(',') || '.csv';
+  };
+
   return (
     <Box sx={{ mb: 4 }}>
       <Paper
@@ -102,28 +169,56 @@ const ImportCSV: React.FC<ImportCSVProps> = ({ onImportComplete }) => {
         onDrop={handleDrop}
         onClick={() => document.getElementById('file-input')?.click()}
       >
+        {/* Importer selection dropdown */}
+        <FormControl 
+          sx={{ mb: 2, minWidth: 200, display: 'block' }} 
+          onClick={(e) => e.stopPropagation()}
+          disabled={isLoadingImporters || isLoading}
+        >
+          <InputLabel id="importer-select-label">Bank/Format</InputLabel>
+          <Select
+            labelId="importer-select-label"
+            id="importer-select"
+            value={selectedImporter}
+            label="Bank/Format"
+            onChange={(e) => setSelectedImporter(e.target.value)}
+            fullWidth
+          >
+            {importers.map((importer) => (
+              <MenuItem key={importer.code} value={importer.code}>
+                {importer.name}
+              </MenuItem>
+            ))}
+          </Select>
+        </FormControl>
+        
+        {/* Auto-categorization checkbox */}
         <FormControlLabel
           control={
             <Checkbox
               checked={autoApplyCategories}
               onChange={(e) => setAutoApplyCategories(e.target.checked)}
-              onClick={(e) => e.stopPropagation()} // Prevent triggering file upload dialog
+              onClick={(e) => e.stopPropagation()}
               color="primary"
+              disabled={isLoading}
             />
           }
           label="Auto-apply categories to imported transactions"
-          sx={{ mb: 2 }}
+          sx={{ mb: 2, display: 'block' }}
         />
+        
+        {/* File input and upload UI */}
         <input
           type="file"
           id="file-input"
-          accept=".csv"
+          accept={getSupportedFileTypes()}
           onChange={handleFileInputChange}
           style={{ display: 'none' }}
+          disabled={isLoading || importers.length === 0}
         />
         <UploadFileIcon sx={{ fontSize: 60, color: 'primary.main', mb: 2 }} />
         <Typography variant="h6" component="div" gutterBottom>
-          Drag & Drop CSV File Here
+          Drag & Drop File Here
         </Typography>
         <Typography variant="body2" color="text.secondary" gutterBottom>
           or click to browse files
@@ -131,11 +226,23 @@ const ImportCSV: React.FC<ImportCSVProps> = ({ onImportComplete }) => {
         <Button
           variant="contained"
           component="span"
-          disabled={isLoading}
+          disabled={isLoading || importers.length === 0}
           sx={{ mt: 2 }}
         >
-          {isLoading ? <CircularProgress size={24} /> : 'Select CSV File'}
+          {isLoading ? <CircularProgress size={24} /> : 'Select File'}
         </Button>
+        
+        {/* Selected importer info */}
+        {selectedImporter && (
+          <Typography variant="body2" color="text.secondary" sx={{ mt: 2 }}>
+            Using: {importers.find(imp => imp.code === selectedImporter)?.name}
+            {importers.find(imp => imp.code === selectedImporter)?.description && (
+              <Typography variant="caption" display="block">
+                {importers.find(imp => imp.code === selectedImporter)?.description}
+              </Typography>
+            )}
+          </Typography>
+        )}
       </Paper>
 
       <Snackbar 
