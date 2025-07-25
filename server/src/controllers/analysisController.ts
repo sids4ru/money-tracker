@@ -57,7 +57,7 @@ export const getSpendingByParentCategoryPerMonth = async (req: Request, res: Res
       total: number;
     }>(`
       SELECT 
-        tc.parent_category_id as parent_id,
+        COALESCE(tc.parent_category_id, c.parent_id) as parent_id,
         CAST(substr(t.transaction_date, 4, 2) AS INTEGER) AS month,
         SUM(
           CASE
@@ -70,13 +70,15 @@ export const getSpendingByParentCategoryPerMonth = async (req: Request, res: Res
         transaction_categories tc
       JOIN
         transactions t ON tc.transaction_id = t.id  
+      JOIN
+        categories c ON tc.category_id = c.id
       WHERE 
         substr(t.transaction_date, 7, 4) = ? 
-        AND tc.parent_category_id IS NOT NULL
+        AND (tc.parent_category_id IS NOT NULL OR c.parent_id IS NOT NULL)
       GROUP BY 
-        tc.parent_category_id, month
+        parent_id, month
       ORDER BY 
-        tc.parent_category_id, month
+        parent_id, month
     `, [year.toString()]);
     
     console.log(`Monthly spending data from transaction_categories: ${JSON.stringify(monthlySpendingData)}`);
@@ -179,7 +181,7 @@ export const getSpendingByParentCategoryPerMonth = async (req: Request, res: Res
           WITH DailyTransactions AS (
             -- Get transactions from transaction_categories
             SELECT 
-              tc.parent_category_id as parent_id,
+              COALESCE(tc.parent_category_id, c.parent_id) as parent_id,
               CAST(substr(t.transaction_date, 1, 2) AS INTEGER) AS day,
               CASE
                 WHEN t.debit_amount IS NOT NULL THEN -CAST(REPLACE(t.debit_amount, ',', '') AS REAL)
@@ -190,10 +192,12 @@ export const getSpendingByParentCategoryPerMonth = async (req: Request, res: Res
               transaction_categories tc
             JOIN
               transactions t ON tc.transaction_id = t.id  
+            JOIN
+              categories c ON tc.category_id = c.id
             WHERE 
               substr(t.transaction_date, 7, 4) = ? 
               AND substr(t.transaction_date, 4, 2) = ?
-              AND tc.parent_category_id = ?
+              AND (tc.parent_category_id = ? OR (tc.parent_category_id IS NULL AND c.parent_id = ?))
             
             UNION ALL
             
@@ -232,6 +236,7 @@ export const getSpendingByParentCategoryPerMonth = async (req: Request, res: Res
           year.toString(), 
           selectedMonth.toString().padStart(2, '0'),
           category.id,
+          category.id, // Added parameter for the additional condition
           year.toString(),
           selectedMonth.toString().padStart(2, '0'),
           category.id
