@@ -58,7 +58,7 @@ export const getSpendingByParentCategoryPerMonth = async (req: Request, res: Res
     }>(`
       SELECT 
         COALESCE(tc.parent_category_id, c.parent_id) as parent_id,
-        CAST(substr(t.transaction_date, 4, 2) AS INTEGER) AS month,
+        CAST(substr(t.transaction_date, 6, 2) AS INTEGER) AS month,
         SUM(
           CASE
             WHEN t.debit_amount IS NOT NULL THEN -CAST(REPLACE(t.debit_amount, ',', '') AS REAL)
@@ -73,7 +73,7 @@ export const getSpendingByParentCategoryPerMonth = async (req: Request, res: Res
       JOIN
         categories c ON tc.category_id = c.id
       WHERE 
-        substr(t.transaction_date, 7, 4) = ? 
+        substr(t.transaction_date, 1, 4) = ? 
         AND (tc.parent_category_id IS NOT NULL OR c.parent_id IS NOT NULL)
       GROUP BY 
         parent_id, month
@@ -92,7 +92,7 @@ export const getSpendingByParentCategoryPerMonth = async (req: Request, res: Res
     }>(`
       SELECT 
         c.parent_id,
-        CAST(substr(t.transaction_date, 4, 2) AS INTEGER) AS month,
+        CAST(substr(t.transaction_date, 6, 2) AS INTEGER) AS month,
         SUM(
           CASE
             WHEN t.debit_amount IS NOT NULL THEN -CAST(REPLACE(t.debit_amount, ',', '') AS REAL)
@@ -105,7 +105,7 @@ export const getSpendingByParentCategoryPerMonth = async (req: Request, res: Res
       JOIN 
         categories c ON t.category_id = c.id
       WHERE 
-        substr(t.transaction_date, 7, 4) = ? 
+        substr(t.transaction_date, 1, 4) = ? 
         AND c.parent_id IS NOT NULL
         AND t.category_id IS NOT NULL
       GROUP BY 
@@ -182,7 +182,7 @@ export const getSpendingByParentCategoryPerMonth = async (req: Request, res: Res
             -- Get transactions from transaction_categories
             SELECT 
               COALESCE(tc.parent_category_id, c.parent_id) as parent_id,
-              CAST(substr(t.transaction_date, 1, 2) AS INTEGER) AS day,
+              CAST(substr(t.transaction_date, 9, 2) AS INTEGER) AS day,
               CASE
                 WHEN t.debit_amount IS NOT NULL THEN -CAST(REPLACE(t.debit_amount, ',', '') AS REAL)
                 WHEN t.credit_amount IS NOT NULL THEN CAST(REPLACE(t.credit_amount, ',', '') AS REAL)
@@ -195,8 +195,8 @@ export const getSpendingByParentCategoryPerMonth = async (req: Request, res: Res
             JOIN
               categories c ON tc.category_id = c.id
             WHERE 
-              substr(t.transaction_date, 7, 4) = ? 
-              AND substr(t.transaction_date, 4, 2) = ?
+              substr(t.transaction_date, 1, 4) = ? 
+              AND substr(t.transaction_date, 6, 2) = ?
               AND (tc.parent_category_id = ? OR (tc.parent_category_id IS NULL AND c.parent_id = ?))
             
             UNION ALL
@@ -204,7 +204,7 @@ export const getSpendingByParentCategoryPerMonth = async (req: Request, res: Res
             -- Get transactions with direct category_id
             SELECT 
               c.parent_id,
-              CAST(substr(t.transaction_date, 1, 2) AS INTEGER) AS day,
+              CAST(substr(t.transaction_date, 9, 2) AS INTEGER) AS day,
               CASE
                 WHEN t.debit_amount IS NOT NULL THEN -CAST(REPLACE(t.debit_amount, ',', '') AS REAL)
                 WHEN t.credit_amount IS NOT NULL THEN CAST(REPLACE(t.credit_amount, ',', '') AS REAL)
@@ -215,8 +215,8 @@ export const getSpendingByParentCategoryPerMonth = async (req: Request, res: Res
             JOIN 
               categories c ON t.category_id = c.id
             WHERE 
-              substr(t.transaction_date, 7, 4) = ? 
-              AND substr(t.transaction_date, 4, 2) = ?
+              substr(t.transaction_date, 1, 4) = ? 
+              AND substr(t.transaction_date, 6, 2) = ?
               AND c.parent_id = ?
               AND t.category_id IS NOT NULL
           )
@@ -319,7 +319,7 @@ export const getSpendingByCategoryForMonth = async (req: Request, res: Response)
           transactions t ON tc.transaction_id = t.id
         WHERE 
           tc.parent_category_id = ?
-          AND substr(t.transaction_date, 7, 4) = ? AND substr(t.transaction_date, 4, 2) = ?
+          AND substr(t.transaction_date, 1, 4) = ? AND substr(t.transaction_date, 6, 2) = ?
         
         UNION ALL
         
@@ -338,7 +338,7 @@ export const getSpendingByCategoryForMonth = async (req: Request, res: Response)
           transactions t ON c.id = t.category_id
         WHERE 
           c.parent_id = ?
-          AND substr(t.transaction_date, 7, 4) = ? AND substr(t.transaction_date, 4, 2) = ?
+          AND substr(t.transaction_date, 1, 4) = ? AND substr(t.transaction_date, 6, 2) = ?
           AND t.category_id IS NOT NULL
       )
       

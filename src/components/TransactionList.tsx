@@ -31,6 +31,7 @@ import { Transaction, CategoryInfo } from '../types/Transaction';
 import CategoryAssignmentDialog from './CategoryAssignmentDialog';
 import { CategoryService } from '../services/categoryApi';
 import { TransactionService } from '../services/api';
+import { standardizeDate, formatDateForDisplay } from '../utils/dateUtils';
 
 type Order = 'asc' | 'desc';
 
@@ -196,11 +197,9 @@ const TransactionList: React.FC<TransactionListProps> = ({ transactions, isLoadi
         const bAmount = parseFloat(b.debitAmount || '0') || parseFloat(b.creditAmount || '0');
         comparison = aAmount - bAmount;
       } else if (orderBy === 'date') {
-        // Format date from dd/mm/yyyy to yyyy-mm-dd for proper comparison
-        const aParts = a.date.split('/');
-        const bParts = b.date.split('/');
-        const aDate = new Date(`${aParts[2]}-${aParts[1]}-${aParts[0]}`);
-        const bDate = new Date(`${bParts[2]}-${bParts[1]}-${bParts[0]}`);
+        // Use standardized dates for proper comparison
+        const aDate = new Date(standardizeDate(a.date));
+        const bDate = new Date(standardizeDate(b.date));
         comparison = aDate.getTime() - bDate.getTime();
       } else if (orderBy === 'balance') {
         // Parse balance to number, removing currency symbol and commas
@@ -436,7 +435,7 @@ const TransactionList: React.FC<TransactionListProps> = ({ transactions, isLoadi
                         tabIndex={-1} 
                         key={transaction.id || index}
                       >
-                        <TableCell>{transaction.date}</TableCell>
+                        <TableCell>{formatDateForDisplay(transaction.date)}</TableCell>
                         <TableCell>{transaction.description}</TableCell>
                         <TableCell align="right" sx={{ 
                           color: amount < 0 ? 'error.main' : (amount > 0 ? 'success.main' : 'inherit') 
@@ -546,7 +545,7 @@ const TransactionList: React.FC<TransactionListProps> = ({ transactions, isLoadi
           {selectedTransaction && (
             <Box sx={{ mt: 2 }}>
               <Typography variant="subtitle2">Transaction Details:</Typography>
-              <Typography variant="body2">Date: {selectedTransaction.date}</Typography>
+              <Typography variant="body2">Date: {formatDateForDisplay(selectedTransaction.date)}</Typography>
               <Typography variant="body2">Description: {selectedTransaction.description}</Typography>
               <Typography variant="body2" sx={{ 
                 color: getTransactionAmount(selectedTransaction) < 0 ? 'error.main' : 'success.main'

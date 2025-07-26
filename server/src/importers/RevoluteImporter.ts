@@ -7,6 +7,7 @@
 import { TransactionImporter, NormalizedTransaction } from './types';
 import csvParser from 'csv-parser';
 import { Readable } from 'stream';
+import { standardizeDate } from '../utils/dateUtils';
 
 /**
  * Revolute transaction importer implementation
@@ -63,12 +64,16 @@ export class RevoluteImporter implements TransactionImporter {
             }
           }
           
+          // Standardize the dates
+          const standardizedCompletedDate = standardizeDate(completedDate);
+          const standardizedStartedDate = standardizeDate(getColumnValue(['Started Date']) || '');
+          
           const transaction: NormalizedTransaction = {
             accountNumber: getColumnValue(['Product']) || 'Revolute',
-            transactionDate: completedDate,
+            transactionDate: standardizedCompletedDate,
             description1: description,
             description2: `${transactionType} - ${getColumnValue(['State']) || ''}`,
-            description3: getColumnValue(['Started Date']) || '',
+            description3: standardizedStartedDate,
             debitAmount,
             creditAmount,
             balance: getColumnValue(['Balance']) || '',

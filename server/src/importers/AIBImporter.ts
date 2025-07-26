@@ -8,6 +8,7 @@ import { TransactionImporter, NormalizedTransaction } from './types';
 import csvParser from 'csv-parser';
 import { Readable } from 'stream';
 import { Transform } from 'stream';
+import { standardizeDate } from '../utils/dateUtils';
 
 /**
  * AIB Bank transaction importer implementation
@@ -45,10 +46,14 @@ export class AIBImporter implements TransactionImporter {
             return undefined;
           };
           
+          // Get the transaction date and standardize it
+          const rawTransactionDate = getColumnValue(['Posted Transactions Date', 'PostedTransactionsDate', 'Date']) || '';
+          const standardizedDate = standardizeDate(rawTransactionDate);
+          
           // Map AIB CSV columns to normalized transaction format
           const transaction: NormalizedTransaction = {
             accountNumber: getColumnValue(['Posted Account', 'PostedAccount', 'Account']) || '',
-            transactionDate: getColumnValue(['Posted Transactions Date', 'PostedTransactionsDate', 'Date']) || '',
+            transactionDate: standardizedDate,
             description1: getColumnValue(['Description1', 'Description 1', 'Desc1']) || '',
             description2: getColumnValue(['Description2', 'Description 2', 'Desc2']) || '',
             description3: getColumnValue(['Description3', 'Description 3', 'Desc3']) || '',

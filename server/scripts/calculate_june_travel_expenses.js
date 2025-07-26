@@ -84,7 +84,7 @@ async function checkDatabaseContents() {
   console.log('\n4. Transaction counts by year-month:');
   const transactionCounts = await query(`
     SELECT 
-      strftime('%Y-%m', transaction_date) as year_month,
+      substr(transaction_date, 1, 7) as year_month,
       COUNT(*) as transaction_count
     FROM transactions
     GROUP BY year_month
@@ -129,8 +129,8 @@ async function checkDatabaseContents() {
         LOWER(description2) LIKE '%travel%'
       )
       ${showAll ? 
-      'AND strftime(\'%Y\', transaction_date) = ?' : 
-      'AND strftime(\'%m\', transaction_date) = ? AND strftime(\'%Y\', transaction_date) = ?'}
+      'AND substr(transaction_date, 1, 4) = ?' : 
+      'AND substr(transaction_date, 6, 2) = ? AND substr(transaction_date, 1, 4) = ?'}
     ORDER BY transaction_date DESC
   `, showAll ? [year] : [month, year]);
   console.table(keywordTransactions);
@@ -158,8 +158,8 @@ async function calculateTravelExpenses() {
       WHERE 
         (LOWER(c.name) LIKE '%travel%' OR LOWER(pc.name) LIKE '%travel%')
         ${showAll ? 
-        'AND strftime(\'%Y\', t.transaction_date) = ?' : 
-        'AND strftime(\'%m\', t.transaction_date) = ? AND strftime(\'%Y\', t.transaction_date) = ?'}
+        'AND substr(t.transaction_date, 1, 4) = ?' : 
+        'AND substr(t.transaction_date, 6, 2) = ? AND substr(t.transaction_date, 1, 4) = ?'}
         AND t.debit_amount IS NOT NULL
       ORDER BY 
         t.transaction_date DESC
@@ -193,8 +193,8 @@ async function calculateTravelExpenses() {
       WHERE 
         (LOWER(c.name) LIKE '%travel%' OR LOWER(pc.name) LIKE '%travel%')
         ${showAll ? 
-        'AND strftime(\'%Y\', t.transaction_date) = ?' : 
-        'AND strftime(\'%m\', t.transaction_date) = ? AND strftime(\'%Y\', t.transaction_date) = ?'}
+        'AND substr(t.transaction_date, 1, 4) = ?' : 
+        'AND substr(t.transaction_date, 6, 2) = ? AND substr(t.transaction_date, 1, 4) = ?'}
         AND t.debit_amount IS NOT NULL
     `, showAll ? [year] : [month, year]);
 
@@ -226,8 +226,8 @@ async function calculateTravelExpenses() {
           LOWER(t.description2) LIKE '%travel%'
         )
         ${showAll ? 
-        'AND strftime(\'%Y\', t.transaction_date) = ?' : 
-        'AND strftime(\'%m\', t.transaction_date) = ? AND strftime(\'%Y\', t.transaction_date) = ?'}
+        'AND substr(t.transaction_date, 1, 4) = ?' : 
+        'AND substr(t.transaction_date, 6, 2) = ? AND substr(t.transaction_date, 1, 4) = ?'}
         AND t.debit_amount IS NOT NULL
       ORDER BY 
         t.transaction_date DESC
