@@ -21,6 +21,7 @@ Finance Tracker is a full-stack web application designed to import, categorize, 
   - Intelligent duplicate detection to maintain data integrity
   - Comprehensive transaction list with rich filtering and sorting options
   - Running balance calculation and currency support
+  - Standardized date handling with support for multiple date formats (DD/MM/YYYY, MM/DD/YYYY, YYYY-MM-DD)
   
 - **Smart Categorization System**:
   - Hierarchical categories with parent-child relationships
@@ -38,6 +39,34 @@ Finance Tracker is a full-stack web application designed to import, categorize, 
   - Material UI-based design system
   - Mobile-friendly responsive layout
   - Interactive data tables and visualizations
+
+## Date Handling System
+
+Finance Tracker implements a robust date handling system to ensure consistency across all parts of the application:
+
+- **Standardized Date Format**: All dates are internally stored in YYYY-MM-DD ISO format for consistent processing
+- **Multi-format Date Parser**: Automatically detects and converts various date formats:
+  - European format (DD/MM/YYYY)
+  - US format (MM/DD/YYYY)
+  - ISO format (YYYY-MM-DD)
+  - Handles different separators (/, -)
+- **Database Standardization**: Includes utilities to scan and fix inconsistent date formats in the database
+- **Consistent Display Options**: Display dates in ISO or European format based on user preference
+- **Import Date Normalization**: All importers automatically standardize dates from bank CSV files
+
+### Date Standardization Script
+
+The application includes a database date standardization script (`server/scripts/standardize_database_dates.js`) that:
+- Scans all transactions in the database
+- Identifies dates in non-standard formats
+- Converts them to the consistent YYYY-MM-DD format
+- Maintains a log of all modified records
+
+Run the standardization script to fix any legacy date inconsistencies:
+```bash
+cd server
+node scripts/standardize_database_dates.js
+```
 
 ## Technology Stack
 

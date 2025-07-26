@@ -129,6 +129,7 @@ The AIB importer serves as the first concrete implementation of the importer int
 import { TransactionImporter, NormalizedTransaction } from './types';
 import * as csv from 'csv-parser';
 import { Readable } from 'stream';
+import { standardizeDate } from '../utils/dateUtils';
 
 export class AIBImporter implements TransactionImporter {
   name = 'AIB Bank';
@@ -160,10 +161,14 @@ export class AIBImporter implements TransactionImporter {
             return undefined;
           };
           
+          // Get the transaction date and standardize it
+          const rawTransactionDate = getColumnValue(['Posted Transactions Date', 'PostedTransactionsDate', 'Date']) || '';
+          const standardizedDate = standardizeDate(rawTransactionDate);
+          
           // Map AIB CSV columns to normalized transaction format
           const transaction: NormalizedTransaction = {
             accountNumber: getColumnValue(['Posted Account', 'PostedAccount', 'Account']) || '',
-            transactionDate: getColumnValue(['Posted Transactions Date', 'PostedTransactionsDate', 'Date']) || '',
+            transactionDate: standardizedDate,
             description1: getColumnValue(['Description1', 'Description 1', 'Desc1']) || '',
             description2: getColumnValue(['Description2', 'Description 2', 'Desc2']) || '',
             description3: getColumnValue(['Description3', 'Description 3', 'Desc3']) || '',
@@ -284,6 +289,47 @@ server/
 │   │   ├── AIBImporter.ts                 # AIB Bank importer
 │   │   └── ... (other importers)
 ```
+
+## Date Handling in Importers
+
+A critical aspect of transaction importing is ensuring consistent date formats across different bank CSV exports. The Finance Tracker application implements a standardized approach to date handling within all importers:
+
+### Standardization Process
+
+1. **Import**: Each importer extracts raw date strings from bank-specific CSV formats
+2. **Normalization**: All dates are processed through the `standardizeDate()` utility from `dateUtils.ts`
+3. **Storage**: Dates are stored in the consistent YYYY-MM-DD format in the database
+
+### Implementation Requirements
+
+When creating custom importers, follow these requirements for date handling:
+
+```typescript
+import { standardizeDate } from '../utils/dateUtils';
+
+// Within your importer's parseFile method:
+const rawTransactionDate = getColumnValue(['Date', 'Transaction Date', 'Posted Date']); 
+const standardizedDate = standardizeDate(rawTransactionDate);
+
+// Use the standardized date in your normalized transaction
+const transaction = {
+  // ...other fields
+  transactionDate: standardizedDate,
+  // ...other fields
+};
+```
+
+### Date Format Support
+
+The `standardizeDate()` utility automatically handles various date formats:
+
+- European format (DD/MM/YYYY)
+- US format (MM/DD/YYYY) 
+- ISO format (YYYY-MM-DD)
+- Mixed formats with different separators (/, -)
+- Dates with time components
+
+This ensures that regardless of the bank's export format, all transaction dates will be consistently stored and processed throughout the application.
 
 ## Conclusion
 
