@@ -147,10 +147,7 @@ export const getSpendingByParentCategoryPerMonth = async (req: Request, res: Res
           values: Array(daysInMonth).fill(0)
         };
         
-        // Skip if there's no spending for this category in the selected month
-        if (category.data[selectedMonth - 1] === 0) {
-          continue;
-        }
+        // Always generate daily data structure, even if values will be zero
         
         // Fetch daily spending for this parent category for the selected month
         // Note: transaction_date is in DD/MM/YYYY format, so we extract day differently
