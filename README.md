@@ -31,6 +31,7 @@ Finance Tracker is a full-stack web application designed to import, categorize, 
 - **Financial Analysis**:
   - Powerful visualizations including interactive line charts, bar charts, and category breakdowns
   - Period-over-period spending analysis with monthly and daily trend views
+  - **Cumulative spending analysis** showing how expenses accumulate over time periods
   - Expense tracking by category and parent category with detailed drill-down capability
   - Customizable date ranges and filtering options for all reports
   - Color-coded visualizations to easily distinguish between income and expenses
@@ -206,6 +207,7 @@ finance-tracker/
 
 ### Analyzing Your Finances
 
+**Traditional Analysis (Analysis Page)**:
 1. Navigate to the Analysis page
 2. Select your desired date range and category filters
 3. Explore the interactive visualization dashboard:
@@ -214,9 +216,19 @@ finance-tracker/
    - Category breakdowns with color-coded income/expense differentiation
    - Year-over-year comparison capabilities
 
+**Cumulative Analysis (Cumulative Page)**:
+1. Navigate to the Cumulative page
+2. View cumulative spending patterns:
+   - **Yearly View**: Select a year to see cumulative spending across 12 months
+   - **Monthly View**: Select a specific month to see daily cumulative spending
+3. Understand spending velocity and accumulation patterns:
+   - Track how spending builds up over time periods
+   - Identify periods of accelerated spending
+   - Monitor progress against financial goals
+
 ## Financial Analysis & Visualization
 
-The Finance Tracker application includes three primary visualization types to help you gain insights into your spending habits and financial trends:
+The Finance Tracker application includes four primary visualization types to help you gain insights into your spending habits and financial trends:
 
 ```mermaid
 graph TD
@@ -268,6 +280,30 @@ This horizontal bar chart offers a detailed breakdown of spending within subcate
 - Color-coded bars distinguish between income (green) and expenses (red)
 - Sort by amount to identify the largest spending areas
 - Customizable by month and year for targeted analysis
+
+### 4. Cumulative Spending Analysis
+
+![Cumulative Spending Analysis](public/logo512.png)
+
+The Cumulative page provides a unique perspective on spending patterns by showing how expenses accumulate over time:
+
+**Cumulative Monthly View**:
+- Shows running totals across 12 months of the year
+- Each line represents cumulative spending for a parent category
+- Reveals spending velocity and financial momentum throughout the year
+- Interactive tooltips display both monthly spending and cumulative totals
+
+**Cumulative Daily View**:
+- Displays day-by-day accumulation of spending within a selected month
+- Shows how spending builds up from the 1st to the last day of the month
+- Helps identify spending patterns and velocity within monthly cycles
+- Useful for budget tracking and understanding cash flow timing
+
+This visualization type is particularly valuable for:
+- Understanding spending acceleration patterns
+- Tracking progress against annual spending goals
+- Identifying periods of high financial activity
+- Analyzing cash flow timing and spending velocity
 
 ## Managing Categories
 
